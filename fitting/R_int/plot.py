@@ -7,7 +7,7 @@ from typing import Optional
 import matplotlib.pyplot as plt
 import numpy as np
 
-from fitting.R_int_fitting.model import T2R_th
+from fitting.R_int.model import T2R_th
 
 
 def plot_thermal_resistance(result, output: Optional[str] = None):
