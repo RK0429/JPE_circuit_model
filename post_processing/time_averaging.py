@@ -42,7 +42,7 @@ def load_data(filename: str, delimiter: str = r"\s+") -> pd.DataFrame:
     """
     try:
         if delimiter == r"\s+":
-            df = pd.read_csv(filename, delim_whitespace=True)
+            df = pd.read_csv(filename, sep="\s+")
         else:
             df = pd.read_csv(filename, sep=delimiter)
         logging.info("Data loaded from %s", filename)
@@ -188,6 +188,7 @@ def plot_dc_sweep(
     plt.subplots_adjust(hspace=0.0, wspace=0.0)
 
     if output_path:
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(output_path)
         logging.info("DC sweep plot saved to %s", output_path)
     plt.show()
@@ -208,6 +209,7 @@ def plot_voltage_time(df: pd.DataFrame, output_path: Optional[str] = None) -> No
     ax.grid(True)
     fig.tight_layout()
     if output_path:
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(output_path)
         logging.info("Voltage-time plot saved to %s", output_path)
     plt.show()
@@ -217,7 +219,9 @@ def save_data(df: pd.DataFrame, output_file: str) -> None:
     """
     Save DataFrame to file with tab delimiter.
     """
-    df.to_csv(output_file, sep="\t", index=True)
+    output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(output_path, sep="\t", index=True)
     logging.info("Data saved to %s", output_file)
 
 
