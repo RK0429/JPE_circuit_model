@@ -7,17 +7,15 @@ import lmfit as lf  # type: ignore
 import numpy as np
 from lmfit.model import ModelResult  # type: ignore
 
-from .model import output_power
 
-
-def setup_fitting_model() -> lf.Model:
+def setup_fitting_model(output_power_fn) -> lf.Model:
     """
     Set up the RLC series model for output power fitting.
 
     Returns:
         lf.Model: The lmfit Model for output_power.
     """
-    return lf.Model(output_power, independent_vars=["V", "R_int"])
+    return lf.Model(output_power_fn, independent_vars=["V", "R_int"])
 
 
 def perform_fitting(

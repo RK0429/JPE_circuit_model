@@ -7,8 +7,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from .model import constants
-
 
 def plot_fitting_results(
     V: np.ndarray,
@@ -44,6 +42,7 @@ def plot_complex_figure(
     I_cal: np.ndarray,
     RP_cal: np.ndarray,
     fig_path: str,
+    constants,
     epsilon: float = 5000,
     show_exp: bool = True,
 ):

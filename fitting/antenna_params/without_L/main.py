@@ -10,10 +10,10 @@ import logging
 
 import numpy as np
 
-from .fitting import perform_fitting, setup_fitting_model
-from .io import load_data, load_txt_data
+from ..utils.fitting import perform_fitting, setup_fitting_model
+from ..utils.io import load_data, load_txt_data
+from ..utils.plot import plot_complex_figure, plot_fitting_results, plot_txt_data
 from .model import constants, output_power
-from .plot import plot_complex_figure, plot_fitting_results, plot_txt_data
 
 
 def parse_args():
@@ -100,7 +100,7 @@ def main():
     }
 
     # Setup and perform fitting
-    model = setup_fitting_model()
+    model = setup_fitting_model(output_power)
     params = model.make_params()
     for name in model.param_names:
         params[name].set(
@@ -197,6 +197,7 @@ def main():
         I_cal=I_cal_txt,
         RP_cal=RP_cal_txt,
         fig_path=args.fig10,
+        constants=constants,
         epsilon=args.epsilon_comp,
         show_exp=True,
     )
