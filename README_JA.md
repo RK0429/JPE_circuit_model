@@ -81,11 +81,13 @@ cd JPE_circuit_model
 
 1. `examples` フォルダにある `.asc` ファイル（例: `JPE_3stacks.asc`）を LTSpice で開きます。
 2. `.tran 0 2 0 10u` が設定済みですので、そのままシミュレーションを実行してください。
-3. 結果を `.raw` またはタブ区切りテキスト形式でエクスポートします。
+3. "V(nt)", "V(na)", "I(Rad)", "I(Rgnd)" のデータをtxt形式でエクスポートします。
 
 ### Python スクリプトによる解析
 
 #### 時間平均解析
+
+1. 出力したtxtファイルを可視化します。
 
 ```bash
 python post_processing/time_averaging.py \
