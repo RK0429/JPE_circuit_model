@@ -10,17 +10,17 @@ import logging
 
 import lmfit as lf  # type: ignore
 
-from fitting.fitting import perform_fitting
-from fitting.io import load_data, save_processed_data
-from fitting.model import P2T, T2R_th
-from fitting.plot import (
+from fitting.R_int_fitting.fitting import perform_fitting
+from fitting.R_int_fitting.io import load_data, save_processed_data
+from fitting.R_int_fitting.model import P2T, T2R_th
+from fitting.R_int_fitting.plot import (
     plot_current_temperature,
     plot_current_thermal_resistance,
     plot_thermal_resistance,
     plot_voltage_current,
 )
-from fitting.processing import process_data
-from fitting.solvers import I_int2V_int
+from fitting.R_int_fitting.processing import process_data
+from fitting.R_int_fitting.solvers import I_int2V_int
 
 
 def parse_args():

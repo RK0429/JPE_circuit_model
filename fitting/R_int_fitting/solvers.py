@@ -7,7 +7,7 @@ from typing import cast
 import numpy as np
 from scipy.optimize import root  # type: ignore
 
-from fitting.model import P2T, T2R_int, T2R_th
+from fitting.R_int_fitting.model import P2T, T2R_int, T2R_th
 
 
 def solve4T(
