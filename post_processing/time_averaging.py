@@ -198,10 +198,14 @@ def plot_dc_sweep(
     plt.show()
 
 
-def plot_temperature_time(df: pd.DataFrame, output_path: str = None) -> None:
-    # 1) Ensure 'time' is a timedelta
-    if "time" in df.columns and not pd.api.types.is_timedelta64_dtype(df["time"]):
-        df["time"] = pd.to_timedelta(df["time"], errors="raise")
+def plot_temperature_time(df: pd.DataFrame, output_path: Optional[str] = None) -> None:
+    # 1) Ensure 'time' is a timedelta relative to start
+    if "time" in df.columns:
+        if pd.api.types.is_datetime64_any_dtype(df["time"]):
+            # Convert datetime to elapsed timedelta since first timestamp
+            df["time"] = df["time"] - df["time"].iloc[0]
+        elif not pd.api.types.is_timedelta64_dtype(df["time"]):
+            df["time"] = pd.to_timedelta(df["time"], errors="raise")
 
     # 2) Choose x-axis values (seconds here)
     x = df["time"].dt.total_seconds()
