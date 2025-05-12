@@ -198,28 +198,27 @@ def plot_dc_sweep(
     plt.show()
 
 
-def plot_temperature_time(df: pd.DataFrame, output_path: Optional[str] = None) -> None:
-    """
-    Plot temperature over time if 'V(t)' column exists.
-    """
+def plot_temperature_time(df: pd.DataFrame, output_path: str = None) -> None:
+    # 1) Ensure 'time' is a timedelta
+    if "time" in df.columns and not pd.api.types.is_timedelta64_dtype(df["time"]):
+        df["time"] = pd.to_timedelta(df["time"], errors="raise")
+
+    # 2) Choose x-axis values (seconds here)
+    x = df["time"].dt.total_seconds()
+
     if "V(t)" not in df.columns:
         raise KeyError("'V(t)' column not found in DataFrame")
-    configure_plotting()
+
+    # 3) Plot
     fig, ax = plt.subplots(figsize=(10, 6))
-    # Cast string time values to datetime to avoid categorical unit warnings
-    if "time" in df.columns:
-        try:
-            time_vals = pd.to_datetime(df["time"])
-        except Exception:
-            time_vals = df["time"]
-    else:
-        time_vals = df.index
-    ax.plot(time_vals, df["V(t)"])
+    ax.plot(x * 1e9, df["V(t)"])
     ax.set_title("Temperature over Time")
-    ax.set_xlabel("Time")
+    ax.set_xlabel("Time [ns]")
     ax.set_ylabel("Temperature [K]")
     ax.grid(True)
     fig.tight_layout()
+
+    # 4) Save if requested
     if output_path:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(output_path)
