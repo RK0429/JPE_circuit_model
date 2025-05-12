@@ -273,10 +273,10 @@ def main() -> None:
         skip_resampling=args.skip_resample,
     )
 
-    output_data_path = args.output_file or str(
-        Path(args.input_file).with_suffix("_processed.txt")
-    )
     if not args.skip_resample:
+        output_data_path = args.output_file or str(
+            Path(args.input_file).with_suffix("_processed.txt")
+        )
         save_data(df_processed, output_data_path)
     else:
         logging.info("Skipping saving processed data as skip_resample is set")
