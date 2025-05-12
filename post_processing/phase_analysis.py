@@ -53,17 +53,17 @@ def load_data(file_path: str) -> pd.DataFrame:
     """
     try:
         df = pd.read_csv(file_path, sep=r"\s+")  # type: ignore[call-overload]
-        logging.info(f"Data loaded successfully from {file_path}.")
-        logging.debug(f"DataFrame columns: {df.columns.tolist()}")
+        logging.info("Data loaded successfully from %s.", file_path)
+        logging.debug("DataFrame columns: %s", df.columns.tolist())
         return df
     except FileNotFoundError:
-        logging.error(f"File not found: {file_path}")
+        logging.error("File not found: %s", file_path)
         raise
     except pd.errors.ParserError as e:
-        logging.error(f"Error parsing file {file_path}: {e}")
+        logging.error("Error parsing file %s: %s", file_path, e)
         raise
     except Exception as e:
-        logging.error(f"Unexpected error loading data from {file_path}: {e}")
+        logging.error("Unexpected error loading data from %s: %s", file_path, e)
         raise
 
 
@@ -89,7 +89,7 @@ def process_data(df: pd.DataFrame, resample_interval: str = "100us") -> pd.DataF
         col for col in required_columns if col not in df_processed.columns
     ]
     if missing_columns:
-        logging.error(f"Missing columns in data: {missing_columns}")
+        logging.error("Missing columns in data: %s", missing_columns)
         raise KeyError(f"Missing columns: {missing_columns}")
 
     # Compute differences in phases
@@ -107,8 +107,8 @@ def process_data(df: pd.DataFrame, resample_interval: str = "100us") -> pd.DataF
     try:
         df_processed["time"] = pd.to_datetime(df_processed["time"], unit="s")
         logging.info("Converted 'time' column to datetime.")
-    except Exception as e:
-        logging.error(f"Error converting 'time' to datetime: {e}")
+    except (ValueError, TypeError) as e:
+        logging.error("Error converting 'time' to datetime: %s", e)
         raise
 
     # Set 'time' as index
@@ -118,9 +118,9 @@ def process_data(df: pd.DataFrame, resample_interval: str = "100us") -> pd.DataF
     # Resample data every 100 microseconds (100U)
     try:
         df_resampled = df_processed.resample(resample_interval).mean()
-        logging.info(f"Resampled data every {resample_interval} and took mean.")
-    except Exception as e:
-        logging.error(f"Error during resampling: {e}")
+        logging.info("Resampled data every %s and took mean.", resample_interval)
+    except (ValueError, TypeError, KeyError) as e:
+        logging.error("Error during resampling: %s", e)
         raise
 
     # Reset index
@@ -128,7 +128,9 @@ def process_data(df: pd.DataFrame, resample_interval: str = "100us") -> pd.DataF
     logging.info("Reset index after resampling.")
 
     # Optional: Check 'time' dtype
-    logging.debug(f"'time' column dtype after processing: {df_resampled['time'].dtype}")
+    logging.debug(
+        "'time' column dtype after processing: %s", df_resampled["time"].dtype
+    )
 
     return df_resampled
 
@@ -159,7 +161,7 @@ def plot_data(
         col for col in required_columns if col not in df_resampled.columns
     ]
     if missing_columns:
-        logging.error(f"Missing columns for plotting: {missing_columns}")
+        logging.error("Missing columns for plotting: %s", missing_columns)
         raise KeyError(f"Missing columns: {missing_columns}")
 
     # Configure plotting parameters
@@ -214,9 +216,9 @@ def plot_data(
     if plot_path:
         try:
             fig.savefig(plot_path)
-            logging.info(f"Plot saved to {plot_path}.")
-        except Exception as e:
-            logging.error(f"Error saving plot to {plot_path}: {e}")
+            logging.info("Plot saved to %s.", plot_path)
+        except OSError as e:
+            logging.error("Error saving plot to %s: %s", plot_path, e)
 
     # Show plot
     plt.show()
@@ -234,9 +236,9 @@ def save_data(df: pd.DataFrame, file_path: str) -> None:
     """
     try:
         df.to_csv(file_path, sep="\t", index=True)
-        logging.info(f"Processed data saved to {file_path}.")
-    except Exception as e:
-        logging.error(f"Error saving data to {file_path}: {e}")
+        logging.info("Processed data saved to %s.", file_path)
+    except OSError as e:
+        logging.error("Error saving data to %s: %s", file_path, e)
         raise
 
 
