@@ -92,14 +92,25 @@ cd JPE_circuit_model
 #### 時間平均解析
 
 1. 出力したtxtファイルのサイズを時間平均化により削減し、内容を可視化します。
+  1. 生データから時間平均化を行う場合：
 
-```bash
-python post_processing/time_averaging.py \
-  data/dc_sweep_JPE.txt \
-  --output_file results/dc_sweep_processed.txt \
-  --plot_path results/dc_sweep_plot.png \
-  --vt_plot_path results/voltage_time_plot.png
-```
+    ```bash
+    python post_processing/time_averaging.py \
+      raw_data/dc_sweep_JPE.txt \
+      --output_file data/dc_sweep_processed.txt \
+      --plot_path results/dc_sweep_plot.png \
+      --tt_plot_path results/temperature_time_plot.png
+    ```
+
+  2. 時間平均化済みのデータを使用する場合：
+
+    ```bash
+    python post_processing/time_averaging.py \
+      data/dc_sweep_processed.txt \
+      --plot_path results/dc_sweep_plot.png \
+      --tt_plot_path results/temperature_time_plot.png \
+      --skip_resample
+    ```
 
 #### 位相解析
 
