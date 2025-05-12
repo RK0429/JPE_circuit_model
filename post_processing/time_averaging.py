@@ -41,10 +41,7 @@ def load_data(filename: str, delimiter: str = r"\s+") -> pd.DataFrame:
         pd.DataFrame: Loaded DataFrame.
     """
     try:
-        if delimiter == r"\s+":
-            df = pd.read_csv(filename, sep="\s+")
-        else:
-            df = pd.read_csv(filename, sep=delimiter)
+        df = pd.read_csv(filename, sep=delimiter)
         logging.info("Data loaded from %s", filename)
         return df
     except Exception:
