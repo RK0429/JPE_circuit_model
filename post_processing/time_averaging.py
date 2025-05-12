@@ -198,24 +198,32 @@ def plot_dc_sweep(
     plt.show()
 
 
-def plot_voltage_time(df: pd.DataFrame, output_path: Optional[str] = None) -> None:
+def plot_temperature_time(df: pd.DataFrame, output_path: Optional[str] = None) -> None:
     """
-    Plot voltage over time if 'V(t)' column exists.
+    Plot temperature over time if 'V(t)' column exists.
     """
     if "V(t)" not in df.columns:
         raise KeyError("'V(t)' column not found in DataFrame")
     configure_plotting()
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.plot(df["time"] if "time" in df.columns else df.index, df["V(t)"])
-    ax.set_title("Voltage over Time")
+    # Cast string time values to datetime to avoid categorical unit warnings
+    if "time" in df.columns:
+        try:
+            time_vals = pd.to_datetime(df["time"])
+        except Exception:
+            time_vals = df["time"]
+    else:
+        time_vals = df.index
+    ax.plot(time_vals, df["V(t)"])
+    ax.set_title("Temperature over Time")
     ax.set_xlabel("Time")
-    ax.set_ylabel("Voltage [V]")
+    ax.set_ylabel("Temperature [K]")
     ax.grid(True)
     fig.tight_layout()
     if output_path:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(output_path)
-        logging.info("Voltage-time plot saved to %s", output_path)
+        logging.info("Temperature-time plot saved to %s", output_path)
     plt.show()
 
 
@@ -238,7 +246,7 @@ def main() -> None:
     )
     parser.add_argument("--plot_path", help="DC sweep plot file path", default=None)
     parser.add_argument(
-        "--vt_plot_path", help="Voltage-time plot file path", default=None
+        "--tt_plot_path", help="Temperature-time plot file path", default=None
     )
     parser.add_argument(
         "--output_unit",
@@ -289,11 +297,11 @@ def main() -> None:
             ylim=tuple(args.ylim) if args.ylim else None,
             output_path=args.plot_path,
         )
-    if args.vt_plot_path:
+    if args.tt_plot_path:
         try:
-            plot_voltage_time(df_processed, output_path=args.vt_plot_path)
+            plot_temperature_time(df_processed, output_path=args.tt_plot_path)
         except KeyError:
-            logging.warning("Skipping voltage-time plot: 'V(t)' column not found")
+            logging.warning("Skipping temperature-time plot: 'V(t)' column not found")
 
 
 if __name__ == "__main__":
