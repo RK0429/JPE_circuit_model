@@ -43,5 +43,5 @@ def perform_fitting(
     result = model.fit(data, params, V=V, R_int=R_int, weights=weights)
     logging.info("Fitting completed.")
     logging.info(result.fit_report())
-    logging.info(f"Best fit values: {result.best_values}")
+    logging.info("Best fit values: %s", result.best_values)
     return result
