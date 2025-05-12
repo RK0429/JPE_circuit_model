@@ -6,6 +6,7 @@ import logging
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.gridspec import GridSpec
 
 
 def plot_fitting_results(
@@ -19,7 +20,8 @@ def plot_fitting_results(
     ylabel: str = "Output Power [units]",
 ):
     """
-    Plot the experimental and calculated output power against voltage and save the figure.
+    Plot experimental and calculated output power against voltage and
+    save the figure.
     """
     plt.figure(figsize=(8, 6))
     plt.scatter(V, BO_exp_scaled * 1e6, label=label_exp, s=5)
@@ -30,7 +32,7 @@ def plot_fitting_results(
     plt.ylabel(ylabel)
     plt.tight_layout()
     plt.savefig(fig_path)
-    logging.info(f"Fitting results plot saved to {fig_path}.")
+    logging.info("Fitting results plot saved to %s.", fig_path)
     plt.show()
 
 
@@ -47,7 +49,8 @@ def plot_complex_figure(
     show_exp: bool = True,
 ):
     """
-    Create and save a complex figure with multiple subplots for voltage, current, and power relationships.
+    Create and save a complex figure with multiple subplots for voltage,
+    current, and power relationships.
     """
     plt.rcParams["font.family"] = "Times New Roman"
     plt.rcParams["mathtext.fontset"] = "cm"
@@ -55,7 +58,7 @@ def plot_complex_figure(
     plt.rcParams["font.size"] = 15
 
     fig = plt.figure(figsize=(8, 8))
-    spec = plt.GridSpec(ncols=2, nrows=2, width_ratios=[5, 2], height_ratios=[2, 5])
+    spec = GridSpec(ncols=2, nrows=2, width_ratios=[5, 2], height_ratios=[2, 5])
 
     ax_top = fig.add_subplot(spec[0])
     ax_side = fig.add_subplot(spec[3])
@@ -110,7 +113,7 @@ def plot_complex_figure(
     plt.subplots_adjust(hspace=0.0, wspace=0.0)
 
     plt.savefig(fig_path)
-    logging.info(f"Complex figure saved to {fig_path}.")
+    logging.info("Complex figure saved to %s.", fig_path)
     plt.show()
 
 
@@ -129,7 +132,7 @@ def plot_txt_data(
     plt.rcParams["font.size"] = 15
 
     fig = plt.figure(figsize=(8, 8))
-    spec = plt.GridSpec(ncols=2, nrows=2, width_ratios=[5, 2], height_ratios=[2, 5])
+    spec = GridSpec(ncols=2, nrows=2, width_ratios=[5, 2], height_ratios=[2, 5])
 
     ax_top = fig.add_subplot(spec[0])
     ax_side = fig.add_subplot(spec[3])
@@ -180,5 +183,5 @@ def plot_txt_data(
     plt.subplots_adjust(hspace=0.0, wspace=0.0)
 
     plt.savefig(fig_path)
-    logging.info(f"Text data plot saved to {fig_path}.")
+    logging.info("Text data plot saved to %s.", fig_path)
     plt.show()
