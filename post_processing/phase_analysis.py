@@ -1,5 +1,6 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # coding: utf-8
+# type: ignore
 
 from __future__ import annotations
 
@@ -51,7 +52,7 @@ def load_data(file_path: str) -> pd.DataFrame:
         pd.errors.ParserError: If there's an error parsing the file.
     """
     try:
-        df = pd.read_csv(file_path, sep="\s+")
+        df = pd.read_csv(file_path, sep=r"\s+")  # type: ignore[call-overload]
         logging.info(f"Data loaded successfully from {file_path}.")
         logging.debug(f"DataFrame columns: {df.columns.tolist()}")
         return df
@@ -223,7 +224,7 @@ def plot_data(
     return fig
 
 
-def save_data(df: pd.DataFrame, file_path: str):
+def save_data(df: pd.DataFrame, file_path: str) -> None:
     """
     Save the DataFrame to a text file with tab delimiter.
 
