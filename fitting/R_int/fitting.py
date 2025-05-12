@@ -16,7 +16,7 @@ def fit_callback(
     Callback for fitting iterations to log chi-square value.
     """
     chi_sq = np.sum(resid**2)
-    logging.info(f"Iteration {iter}: chi-square = {chi_sq}")
+    logging.info("Iteration %d: chi-square = %f", iter, chi_sq)
     return False
 
 
