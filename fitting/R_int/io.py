@@ -18,15 +18,15 @@ def load_data(file_path: str) -> pd.DataFrame:
     """
     try:
         df = pd.read_table(file_path)
-        logging.info(f"Data loaded successfully from {file_path}.")
-        logging.debug(f"DataFrame columns: {df.columns.tolist()}")
+        logging.info("Data loaded successfully from %s.", file_path)
+        logging.debug("DataFrame columns: %s", df.columns.tolist())
         return df
     except Exception:
-        logging.exception(f"Error loading data from {file_path}")
+        logging.exception("Error loading data from %s", file_path)
         raise
 
 
-def save_processed_data(df: pd.DataFrame, file_path: str):
+def save_processed_data(df: pd.DataFrame, file_path: str) -> None:
     """
     Save the processed DataFrame to a text file.
 
@@ -36,7 +36,7 @@ def save_processed_data(df: pd.DataFrame, file_path: str):
     """
     try:
         df.to_csv(file_path, sep="\t", index=True)
-        logging.info(f"Processed data saved to {file_path}.")
+        logging.info("Processed data saved to %s.", file_path)
     except Exception:
-        logging.exception(f"Error saving processed data to {file_path}")
+        logging.exception("Error saving processed data to %s", file_path)
         raise
