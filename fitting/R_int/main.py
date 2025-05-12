@@ -7,8 +7,11 @@ CLI entry point for R_int fitting analysis.
 
 import argparse
 import logging
+from argparse import Namespace
+from typing import Any, cast
 
-import lmfit as lf  # type: ignore
+import lmfit as lf
+import numpy as np
 
 from fitting.R_int.fitting import perform_fitting
 from fitting.R_int.io import load_data, save_processed_data
@@ -23,7 +26,7 @@ from fitting.R_int.processing import process_data
 from fitting.R_int.solvers import I_int2V_int
 
 
-def parse_args():
+def parse_args() -> Namespace:
     parser = argparse.ArgumentParser(description="R_int fitting analysis")
     parser.add_argument("input_file", help="Path to input data file")
     parser.add_argument(
@@ -38,7 +41,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
+def main() -> None:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
     )
@@ -108,14 +111,20 @@ def main():
     plot_voltage_current(I_int, V_int, V_cal, output=args.output_plot)
 
     P_cal = V_cal * I_int
-    T_cal = P2T(P_cal, result.best_values["gamma"], result.best_values["T_bath"])
+    T_cal = cast(
+        np.ndarray[Any, Any],
+        P2T(P_cal, result.best_values["gamma"], result.best_values["T_bath"]),
+    )
     plot_current_temperature(I_int, T_cal, output=args.output_plot)
 
-    R_th_cal = T2R_th(
-        T_cal,
-        result.best_values["alpha"],
-        result.best_values["beta"],
-        result.best_values["gamma"],
+    R_th_cal = cast(
+        np.ndarray[Any, Any],
+        T2R_th(
+            T_cal,
+            result.best_values["alpha"],
+            result.best_values["beta"],
+            result.best_values["gamma"],
+        ),
     )
     plot_current_thermal_resistance(I_int, R_th_cal, result, output=args.output_plot)
 
