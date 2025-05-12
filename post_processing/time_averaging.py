@@ -70,6 +70,7 @@ def process_data(
     df: pd.DataFrame,
     time_unit: str = "us",
     resample_freq: str = "1N",
+    skip_resampling: bool = False,
 ) -> pd.DataFrame:
     """
     Process the DataFrame by calculating power and resampling on the time index.
@@ -78,6 +79,7 @@ def process_data(
         df (pd.DataFrame): Original DataFrame.
         time_unit (str): Unit for time conversion (e.g. 's', 'us').
         resample_freq (str): Pandas offset alias for resampling frequency.
+        skip_resampling (bool): Skip time conversion and resampling.
 
     Returns:
         pd.DataFrame: Processed DataFrame with power and resampled time.
@@ -93,7 +95,9 @@ def process_data(
         logging.warning("No 'I(Rrad)' column found; skipping power calculation")
 
     # Handle time conversion and resampling
-    if "time" in df_copy.columns:
+    if skip_resampling:
+        logging.info("Skipping time conversion and resampling as requested")
+    elif "time" in df_copy.columns:
         try:
             df_copy["time"] = pd.to_datetime(df_copy["time"], unit=time_unit)
             df_copy.set_index("time", inplace=True)
@@ -124,7 +128,7 @@ def configure_plotting() -> None:
 def plot_dc_sweep(
     df: pd.DataFrame,
     output_unit: str = "uW",
-    xlim: Tuple[float, float] = (-0.05, 1.25),
+    xlim: Tuple[float, float] = (-0.05, 1.5),
     ylim: Optional[Tuple[float, float]] = None,
     output_path: Optional[str] = None,
 ) -> None:
@@ -243,7 +247,7 @@ def main() -> None:
         default="uW",
     )
     parser.add_argument(
-        "--xlim", nargs=2, type=float, help="X-axis limits", default=[-0.05, 1.25]
+        "--xlim", nargs=2, type=float, help="X-axis limits", default=[-0.05, 1.5]
     )
     parser.add_argument(
         "--ylim", nargs=2, type=float, help="Y-axis limits", default=None
@@ -253,18 +257,29 @@ def main() -> None:
     parser.add_argument(
         "--resample_freq", help="Resample frequency alias", default="1N"
     )
+    parser.add_argument(
+        "--skip_resample",
+        action="store_true",
+        help="Skip time conversion and resampling for already resampled data",
+    )
     args = parser.parse_args()
 
     df = load_data(args.input_file, delimiter=args.delimiter)
     df = rename_columns(df)
     df_processed = process_data(
-        df, time_unit=args.time_unit, resample_freq=args.resample_freq
+        df,
+        time_unit=args.time_unit,
+        resample_freq=args.resample_freq,
+        skip_resampling=args.skip_resample,
     )
 
     output_data_path = args.output_file or str(
         Path(args.input_file).with_suffix("_processed.txt")
     )
-    save_data(df_processed, output_data_path)
+    if not args.skip_resample:
+        save_data(df_processed, output_data_path)
+    else:
+        logging.info("Skipping saving processed data as skip_resample is set")
 
     if args.plot_path:
         plot_dc_sweep(
