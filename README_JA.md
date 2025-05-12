@@ -81,13 +81,17 @@ cd JPE_circuit_model
 
 1. `examples` フォルダにある `.asc` ファイル（例: `JPE_3stacks.asc`）を LTSpice で開きます。
 2. `.tran 0 2 0 10u` が設定済みですので、そのままシミュレーションを実行してください。
-3. "V(nt)", "V(na)", "I(Rad)", "I(Rgnd)" のデータをtxt形式でエクスポートします。
+3. データをtxt形式でエクスポートします。
+    1. **時間平均解析**：
+        1. 電流電圧放射強度特性：`V(nt)`, `V(na)`, `I(Rad)`, `I(Rgnd)`が必要
+        2. 時間温度特性：`V(t)`が必要
+    2. **位相解析**：`V(nphase1)`, `V(nphase2)`が必要
 
 ### Python スクリプトによる解析
 
 #### 時間平均解析
 
-1. 出力したtxtファイルを可視化します。
+1. 出力したtxtファイルのサイズを時間平均化により削減し、内容を可視化します。
 
 ```bash
 python post_processing/time_averaging.py \
@@ -98,6 +102,8 @@ python post_processing/time_averaging.py \
 ```
 
 #### 位相解析
+
+1. 出力したtxtファイルの位相を可視化します。
 
 ```bash
 python post_processing/phase_analysis.py \
