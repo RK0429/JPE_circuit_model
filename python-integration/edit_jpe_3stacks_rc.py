@@ -67,13 +67,9 @@ def modify_3stacks_rc(
     # Optional simulation
     if simulate:
         runner = SimRunner(simulator=LTspice, output_folder=sim_output or "sim_results")
-        # Convert ASC to NETLIST first
-        net_file = runner.create_netlist(output_file)
-        if net_file is None:
-            raise RuntimeError(f"Netlist generation failed for {output_file}")
-        # Run simulation on the NETLIST, ensuring ASCII raw and log files
+        # Run simulation directly on the modified ASC file, ensuring ASCII raw and log files
         raw_file, log_file = runner.run_now(
-            str(net_file),
+            output_file,
             switches=["-ascii", "-log"],
         )
         # Verify outputs exist
