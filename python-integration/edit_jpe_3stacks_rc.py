@@ -67,8 +67,8 @@ def modify_3stacks_rc(
     # Optional simulation
     if simulate:
         runner = SimRunner(simulator=LTspice, output_folder=sim_output or "sim_results")
-        # Run simulation on the modified ASC file
-        runner.run(output_file)
+        # Run simulation on the modified ASC file, ensuring raw and log files are produced
+        runner.run(output_file, switches=["-log"])
         runner.wait_completion()
 
 
