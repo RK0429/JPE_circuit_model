@@ -67,9 +67,16 @@ def modify_3stacks_rc(
     # Optional simulation
     if simulate:
         runner = SimRunner(simulator=LTspice, output_folder=sim_output or "sim_results")
-        # Run simulation on the modified ASC file, ensuring raw and log files are produced
-        runner.run(output_file, switches=["-log"])
-        runner.wait_completion()
+        # Run simulation synchronously and capture raw and log files (use ASCII to prevent auto deletion)
+        raw_file, log_file = runner.run_now(
+            output_file,
+            switches=["-ascii", "-log"],
+        )
+        if raw_file is None or log_file is None:
+            raise RuntimeError(
+                f"Simulation did not produce raw/log: raw={raw_file}, log={log_file}"
+            )
+        print(f"Simulation completed. Raw: {raw_file}, Log: {log_file}")
 
 
 def parse_params(param_strs):
