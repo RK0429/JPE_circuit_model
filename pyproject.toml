@@ -14,6 +14,8 @@ pandas = "^2.2.3"
 pandas-stubs = "^2.2.3.250308"
 polars = "^1.29.0"
 plotly = "^6.0.1"
+kupicelib = { path = "./kupicelib", develop = true }
+kuPyLTSpice = { path = "./kuPyLTSpice", develop = true }
 
 
 [build-system]
