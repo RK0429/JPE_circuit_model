@@ -7,7 +7,6 @@ import argparse
 import logging
 from copy import deepcopy
 from typing import Optional
-from pathlib import Path
 
 from kupicelib import AscEditor  # type: ignore
 from kuPyLTSpice import LTspice, SimRunner  # type: ignore
