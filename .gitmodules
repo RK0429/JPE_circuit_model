@@ -1,3 +1,9 @@
 [submodule ".cursor"]
 	path = .cursor
 	url = https://github.com/RK0429/cursor-common-rules.git
+[submodule "kuPyLTSpice"]
+	path = kuPyLTSpice
+	url = https://github.com/RK0429/kuPyLTSpice.git
+[submodule "kupicelib"]
+	path = kupicelib
+	url = https://github.com/RK0429/kupicelib.git
