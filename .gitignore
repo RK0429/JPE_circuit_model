@@ -173,8 +173,5 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-# Cursor
-.cursor
-
 # Large files
 raw_data/
