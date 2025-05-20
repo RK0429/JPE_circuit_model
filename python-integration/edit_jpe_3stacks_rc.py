@@ -7,6 +7,7 @@ import argparse
 import logging
 from copy import deepcopy
 from typing import Optional
+from pathlib import Path
 
 from kupicelib import AscEditor  # type: ignore
 from kuPyLTSpice import LTspice, SimRunner  # type: ignore
@@ -67,14 +68,19 @@ def modify_3stacks_rc(
     # Optional simulation
     if simulate:
         runner = SimRunner(simulator=LTspice, output_folder=sim_output or "sim_results")
-        # Run simulation synchronously and capture raw and log files (use ASCII to prevent auto deletion)
+        # Convert ASC to NETLIST first
+        net_file = runner.create_netlist(output_file)
+        if net_file is None:
+            raise RuntimeError(f"Netlist generation failed for {output_file}")
+        # Run simulation on the NETLIST, ensuring ASCII raw and log files
         raw_file, log_file = runner.run_now(
-            output_file,
+            str(net_file),
             switches=["-ascii", "-log"],
         )
-        if raw_file is None or log_file is None:
+        # Verify outputs exist
+        if raw_file is None or log_file is None or not raw_file.exists() or not log_file.exists():
             raise RuntimeError(
-                f"Simulation did not produce raw/log: raw={raw_file}, log={log_file}"
+                f"Simulation did not produce expected files: {raw_file}, {log_file}"
             )
         print(f"Simulation completed. Raw: {raw_file}, Log: {log_file}")
 
