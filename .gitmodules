@@ -7,3 +7,7 @@
 [submodule "kupicelib"]
 	path = kupicelib
 	url = https://github.com/RK0429/kupicelib.git
+[submodule "cespy"]
+	path = cespy
+	url = https://github.com/RK0429/cespy.git
+	branch = develop
