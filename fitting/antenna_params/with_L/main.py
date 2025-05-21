@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-"""
-CLI entry point for antenna parameter fitting analysis.
-"""
+"""CLI entry point for antenna parameter fitting analysis."""
 
 import argparse
 import logging

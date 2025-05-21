@@ -13,9 +13,7 @@ from fitting.R_int.model import P2T, T2R_int, T2R_th
 def solve4T(
     T: float, P: float, alpha: float, beta: float, gamma: float, T_bath: float
 ) -> float:
-    """
-    Solve for temperature residual given power and parameters.
-    """
+    """Solve for temperature residual given power and parameters."""
     R_th = cast(float, T2R_th(T, alpha, beta, gamma))
     T_calc = cast(float, P2T(P, R_th, T_bath))
     return T - T_calc
@@ -33,9 +31,7 @@ def solve4V_int(
     gamma: float,
     T_bath: float,
 ) -> float:
-    """
-    Function to solve for V_int given I_int and model parameters.
-    """
+    """Function to solve for V_int given I_int and model parameters."""
     P = V_int * I_int
     sol = root(fun=solve4T, x0=30.0, args=(P, alpha, beta, gamma, T_bath))
     if not sol.success:
@@ -58,9 +54,7 @@ def I_int2V_int(
     gamma: float,
     T_bath: float,
 ) -> np.ndarray:
-    """
-    Calculate V_int array from I_int array using root finding.
-    """
+    """Calculate V_int array from I_int array using root finding."""
     V_int = np.empty_like(I_ints)
     for i, I in enumerate(I_ints):
         sol = root(

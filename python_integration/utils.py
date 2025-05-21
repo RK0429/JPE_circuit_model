@@ -30,11 +30,9 @@ def modify_stacks(
     timeout: Optional[float] = None,
     run_switches: Optional[List[str]] = None,
 ) -> Optional[Tuple[Any, Any]]:
-    """
-    Generic function to modify ASC files by adjusting the number of components
-    with the given symbol_name, updating their parameters, saving the netlist,
-    and optionally running a simulation.
-    """
+    """Generic function to modify ASC files by adjusting the number of components with
+    the given symbol_name, updating their parameters, saving the netlist, and optionally
+    running a simulation."""
     editor = AscEditor(input_file)
     # Identify existing components with matching symbol_name
     all_refs = [

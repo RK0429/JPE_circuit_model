@@ -11,9 +11,7 @@ from fitting.R_int.model import T2R_th
 
 
 def plot_thermal_resistance(result, output: Optional[str] = None):
-    """
-    Plot Thermal Resistance vs Temperature from fitting result.
-    """
+    """Plot Thermal Resistance vs Temperature from fitting result."""
     T = np.linspace(-50, 100, 100)
     R_th = T2R_th(
         T,
@@ -41,9 +39,7 @@ def plot_voltage_current(
     V_int_calc: np.ndarray,
     output: Optional[str] = None,
 ):
-    """
-    Plot Experimental and Calculated Voltage vs Current.
-    """
+    """Plot Experimental and Calculated Voltage vs Current."""
     plt.figure(figsize=(8, 6))
     plt.scatter(I_int * 1e3, V_int_exp, label="Experimental", s=5)
     plt.scatter(I_int * 1e3, V_int_calc, label="Calculated", s=5)
@@ -61,9 +57,7 @@ def plot_voltage_current(
 def plot_current_temperature(
     I_int: np.ndarray, T_cal: np.ndarray, output: Optional[str] = None
 ):
-    """
-    Plot Temperature vs Current.
-    """
+    """Plot Temperature vs Current."""
     plt.figure(figsize=(8, 6))
     plt.scatter(I_int, T_cal, s=5)
     plt.grid(True, linestyle="--", linewidth=0.5)
@@ -80,9 +74,7 @@ def plot_current_temperature(
 def plot_current_thermal_resistance(
     I_int: np.ndarray, R_th_cal: np.ndarray, result, output: Optional[str] = None
 ):
-    """
-    Plot Thermal Resistance vs Current.
-    """
+    """Plot Thermal Resistance vs Current."""
     plt.figure(figsize=(8, 6))
     plt.scatter(I_int, R_th_cal, s=5)
     plt.grid(True, linestyle="--", linewidth=0.5)

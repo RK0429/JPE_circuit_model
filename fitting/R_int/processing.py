@@ -7,14 +7,12 @@ import pandas as pd
 
 
 def process_data(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Process the DataFrame by calculating power and resistance.
+    """Process the DataFrame by calculating power and resistance.
 
-    Parameters:
-        df (pd.DataFrame): Original DataFrame.
+    Parameters:     df (pd.DataFrame): Original DataFrame.
 
-    Returns:
-        pd.DataFrame: Processed DataFrame with 'Power' and 'Resistance' columns.
+    Returns:     pd.DataFrame: Processed DataFrame with 'Power' and 'Resistance'
+    columns.
     """
     df_processed = df.copy()
 

@@ -19,10 +19,8 @@ def plot_fitting_results(
     xlabel: str = "Voltage [V]",
     ylabel: str = "Output Power [units]",
 ):
-    """
-    Plot experimental and calculated output power against voltage and
-    save the figure.
-    """
+    """Plot experimental and calculated output power against voltage and save the
+    figure."""
     plt.figure(figsize=(8, 6))
     plt.scatter(V, BO_exp_scaled * 1e6, label=label_exp, s=5)
     plt.scatter(V, RP_cal * 1e6, label=label_cal, s=5)
@@ -48,10 +46,8 @@ def plot_complex_figure(
     epsilon: float = 5000,
     show_exp: bool = True,
 ):
-    """
-    Create and save a complex figure with multiple subplots for voltage,
-    current, and power relationships.
-    """
+    """Create and save a complex figure with multiple subplots for voltage, current, and
+    power relationships."""
     plt.rcParams["font.family"] = "Times New Roman"
     plt.rcParams["mathtext.fontset"] = "cm"
     plt.rcParams["mathtext.default"] = "it"
@@ -123,9 +119,7 @@ def plot_txt_data(
     epsilon: float = 5000,
     Rrad: float = 62.69,
 ):
-    """
-    Plot the data from the text file in a complex figure.
-    """
+    """Plot the data from the text file in a complex figure."""
     plt.rcParams["font.family"] = "Times New Roman"
     plt.rcParams["mathtext.fontset"] = "cm"
     plt.rcParams["mathtext.default"] = "it"

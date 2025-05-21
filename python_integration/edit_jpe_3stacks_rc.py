@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-"""
-Script to modify JPE_3stacks_RC.asc by adjusting the number of
-1stack_RC components and their parameters.
-"""
+"""Script to modify JPE_3stacks_RC.asc by adjusting the number of 1stack_RC components
+and their parameters."""
 import argparse
 import logging
 

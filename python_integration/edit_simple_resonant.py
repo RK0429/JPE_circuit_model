@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""
-Script to simulate a simple RLC resonant circuit ASC file.
-"""
+"""Script to simulate a simple RLC resonant circuit ASC file."""
 import argparse
 import logging
 

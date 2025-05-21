@@ -11,15 +11,13 @@ def load_data(
     bo_file_path: str,
     ive_file_path: str,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Load experimental data from specified file paths.
+    """Load experimental data from specified file paths.
 
-    Parameters:
-        bo_file_path (str): Path to the Bolometer Output data file.
-        ive_file_path (str): Path to the IVE data file.
+    Parameters:     bo_file_path (str): Path to the Bolometer Output data file.
+    ive_file_path (str): Path to the IVE data file.
 
-    Returns:
-        Tuple[pd.DataFrame, pd.DataFrame]: DataFrames containing Bolometer Output and IVE data.
+    Returns:     Tuple[pd.DataFrame, pd.DataFrame]: DataFrames containing Bolometer
+    Output and IVE data.
     """
     try:
         bolometer_df = pd.read_table(bo_file_path)
@@ -32,14 +30,11 @@ def load_data(
 
 
 def load_txt_data(filename: str) -> pd.DataFrame:
-    """
-    Load data from a text file with whitespace delimiter.
+    """Load data from a text file with whitespace delimiter.
 
-    Parameters:
-        filename (str): Path to the text file.
+    Parameters:     filename (str): Path to the text file.
 
-    Returns:
-        pd.DataFrame: DataFrame containing the loaded data.
+    Returns:     pd.DataFrame: DataFrame containing the loaded data.
     """
     try:
         df = pd.read_csv(filename, delim_whitespace=True)

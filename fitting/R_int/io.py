@@ -7,14 +7,11 @@ import pandas as pd
 
 
 def load_data(file_path: str) -> pd.DataFrame:
-    """
-    Load data from a text file into a Pandas DataFrame.
+    """Load data from a text file into a Pandas DataFrame.
 
-    Parameters:
-        file_path (str): Path to the data file.
+    Parameters:     file_path (str): Path to the data file.
 
-    Returns:
-        pd.DataFrame: Loaded DataFrame.
+    Returns:     pd.DataFrame: Loaded DataFrame.
     """
     try:
         df = pd.read_table(file_path)
@@ -27,12 +24,10 @@ def load_data(file_path: str) -> pd.DataFrame:
 
 
 def save_processed_data(df: pd.DataFrame, file_path: str) -> None:
-    """
-    Save the processed DataFrame to a text file.
+    """Save the processed DataFrame to a text file.
 
-    Parameters:
-        df (pd.DataFrame): Processed DataFrame.
-        file_path (str): Path to save the DataFrame.
+    Parameters:     df (pd.DataFrame): Processed DataFrame.     file_path (str): Path to
+    save the DataFrame.
     """
     try:
         df.to_csv(file_path, sep="\t", index=True)
