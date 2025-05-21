@@ -51,7 +51,10 @@ def main():
     editor.save_netlist(output_asc)
     logging.info(f"Modified ASC saved to {output_asc}")
 
-    runner = SimRunner(simulator=LTspice, output_folder=args.output_folder)
+    runner = SimRunner(
+        simulator=LTspice,
+        output_folder=args.output_folder,
+        verbose=True)
     runner.run(output_asc)
     runner.wait_completion()
     logging.info(f"Simulation completed. Results in folder {args.output_folder}")
