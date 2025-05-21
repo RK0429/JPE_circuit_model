@@ -46,4 +46,4 @@ def main():
     logging.info(f"Simulation completed. Results in folder {args.output_folder}")
 
 if __name__ == "__main__":
-    main() 
+    main()
