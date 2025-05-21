@@ -8,11 +8,23 @@ from kuPyLTSpice import LTspice, SimRunner
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Simulate a simple RLC resonant circuit ASC file")
+    parser = argparse.ArgumentParser(
+        description="Simulate a simple RLC resonant circuit ASC file")
     parser.add_argument("input", help="Path to input .asc file")
-    parser.add_argument("-o", "--output", default=None, help="Path to output modified .asc file")
-    parser.add_argument("--output-folder", default="resonant_sim_results", help="Simulation output folder")
-    parser.add_argument("--params", nargs="*", default=None, help="Optional component parameter overrides (e.g. R1=20n,L1=1m)")
+    parser.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        help="Path to output modified .asc file")
+    parser.add_argument(
+        "--output-folder",
+        default="resonant_sim_results",
+        help="Simulation output folder")
+    parser.add_argument(
+        "--params",
+        nargs="*",
+        default=None,
+        help="Optional component parameter overrides (e.g. R1=20n,L1=1m)")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
@@ -42,6 +54,7 @@ def main():
     runner.run(output_asc)
     runner.wait_completion()
     logging.info(f"Simulation completed. Results in folder {args.output_folder}")
+
 
 if __name__ == "__main__":
     main()
