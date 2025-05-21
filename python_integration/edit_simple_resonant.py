@@ -21,6 +21,7 @@ def main():
         default="resonant_sim_results",
         help="Simulation output folder")
     parser.add_argument(
+        "-p",
         "--params",
         nargs="*",
         default=None,
