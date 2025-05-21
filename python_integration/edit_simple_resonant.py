@@ -42,7 +42,6 @@ def main():
     # Add AC analysis and measurement directives
     editor.reset_netlist()
     editor.add_instructions(
-        "; Simulation settings",
         ".ac dec 100 1 100k",
         ".meas AC Gain MAX mag(V(out))"
     )
