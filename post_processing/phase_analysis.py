@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # coding: utf-8
-# type: ignore
+
 
 from __future__ import annotations
 
