@@ -21,6 +21,9 @@ autopep8 = "^2.3.2"
 python-json-logger = "^3.3.0"
 
 
+[tool.poetry.group.dev.dependencies]
+mypy = "^1.15.0"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
