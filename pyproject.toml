@@ -20,9 +20,19 @@ docformatter = "^1.7.7"
 autopep8 = "^2.3.2"
 python-json-logger = "^3.3.0"
 
+[tool.poetry.dev-dependencies]
+black = "^23.1.0"
+flake8 = "^6.0.0"
+mypy = "^1.5.1"
+pytest = "^7.4.0"
 
-[tool.poetry.group.dev.dependencies]
-mypy = "^1.15.0"
+[tool.black]
+line-length = 88
+target-version = ['py310']
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ['E203', 'W503']
 
 [build-system]
 requires = ["poetry-core"]
