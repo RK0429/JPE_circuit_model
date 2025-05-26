@@ -3,8 +3,9 @@
 import argparse
 import logging
 
-from kupicelib import AscEditor
-from kuPyLTSpice import LTspice, SimRunner
+from cespy.src.cespy import LTspice
+from cespy.src.cespy.editor import AscEditor
+from cespy.src.cespy.sim import SimRunner
 
 
 def main():
