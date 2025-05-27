@@ -3,9 +3,9 @@
 import argparse
 import logging
 
-from cespy.src.cespy import LTspice
-from cespy.src.cespy.editor import AscEditor
-from cespy.src.cespy.sim import SimRunner
+from cespy import LTspice
+from cespy.editor import AscEditor
+from cespy.sim import SimRunner
 
 
 def main():
