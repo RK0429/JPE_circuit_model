@@ -15,6 +15,7 @@ polars             = "^1.29.0"
 plotly             = "^6.0.1"
 kupicelib          = { path = "./kupicelib", develop = true }
 kuPyLTSpice        = { path = "./kuPyLTSpice", develop = true }
+cespy              = { path = "./cespy", develop = true }
 docformatter       = "^1.7.7"
 # autopep8 removed from main deps
 
