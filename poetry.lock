@@ -79,6 +79,32 @@ jupyter = ["ipython (>=7.8.0)", "tokenize-rt (>=3.2.0)"]
 uvloop = ["uvloop (>=0.15.2)"]
 
 [[package]]
+name = "cespy"
+version = "0.1.0"
+description = ""
+optional = false
+python-versions = ">=3.10,<4.0"
+groups = ["main"]
+files = []
+develop = true
+
+[package.dependencies]
+clipboard = "*"
+keyboard = "*"
+matplotlib = "*"
+numpy = "*"
+pandas = ">=2.2.3"
+pandas-stubs = ">=2.2.3.241126"
+psutil = "*"
+scipy = "*"
+types-keyboard = ">=0.13.2.20240310"
+types-psutil = ">=7.0.0.20250516"
+
+[package.source]
+type = "directory"
+url = "cespy"
+
+[[package]]
 name = "charset-normalizer"
 version = "3.4.2"
 description = "The Real First Universal Charset Detector. Open, modern and actively maintained alternative to Chardet."
@@ -4896,4 +4922,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "861dc01db85f246925c98717f20d70fbbd5011ecdb247b4de93dd4cf3b06e7bc"
+content-hash = "693b7e102c72ca623fb2b9a2f072daa88bf75e789078b866ed786051557ebdab"
