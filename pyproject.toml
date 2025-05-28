@@ -18,6 +18,7 @@ kuPyLTSpice        = { path = "./kuPyLTSpice", develop = true }
 cespy              = { path = "./cespy", develop = true }
 docformatter       = "^1.7.7"
 # autopep8 removed from main deps
+pylint = "^3.3.7"
 
 [tool.poetry.group.dev.dependencies]
 autopep8 = "^2.3.2"
