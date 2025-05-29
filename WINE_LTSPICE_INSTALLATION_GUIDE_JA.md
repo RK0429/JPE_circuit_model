@@ -23,6 +23,7 @@ brew install --cask wine-stable
 ```
 
 **注**: `wine-stable` はIntel macOS向けにビルドされており、Rosetta 2が必要です。プロンプトが表示されたら、以下のコマンドでRosetta 2をインストールしてください。
+**さらなる注**: 上記コマンドがAppleシリコンのMacで問題なく動作することを確認しました。
 
 ```bash
 softwareupdate --install-rosetta --agree-to-license
