@@ -26,6 +26,7 @@ black    = "^23.1.0"
 flake8   = "^7.1.0"
 mypy     = "^1.5.1"
 pytest   = "^7.4.0"
+pyright = "^1.1.401"
 
 [build-system]
 requires    = ["poetry-core"]
