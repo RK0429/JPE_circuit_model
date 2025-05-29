@@ -49,10 +49,58 @@ def main():
     editor.save_netlist(output_asc)
     logging.info("Modified ASC saved to %s", output_asc)
 
+    # Check if we need special handling for Mac native LTspice
+    import sys
+    from pathlib import Path
+
+    simulation_file = output_asc
+
+    # Try to detect if Mac native LTspice is being used
+    if sys.platform == "darwin":
+        try:
+            # Check if LTspice can handle ASC files
+            if LTspice.using_macos_native_sim():
+                logging.info("Mac native LTspice detected.")
+
+                # Look for an existing netlist file
+                output_net = Path(output_asc).with_suffix(".net")
+                if output_net.exists():
+                    logging.info("Found existing netlist file: %s", output_net)
+                    simulation_file = str(output_net)
+                else:
+                    # Try to use wine-based LTspice if available
+                    logging.info(
+                        "Mac native LTspice has limitations. "
+                        "Attempting to use Wine-based LTspice for netlist generation..."
+                    )
+
+                    # Temporarily switch to wine-based LTspice if available
+                    import os
+
+                    wine_ltspice = os.environ.get("LTSPICEEXECUTABLE")
+                    if wine_ltspice:
+                        # Generate netlist using wine-based LTspice
+                        try:
+                            netlist_path = LTspice.create_netlist(output_asc)
+                            simulation_file = str(netlist_path)
+                            logging.info("Netlist generated: %s", netlist_path)
+                        except Exception as e:
+                            logging.warning("Failed to generate netlist: %s", e)
+                            # Continue with ASC file and let it fail with proper error
+                    else:
+                        logging.warning(
+                            "No Wine-based LTspice found. Simulation may fail. "
+                            "Consider: 1) Installing LTspice via Wine, or "
+                            "2) Manually exporting netlist from LTspice GUI"
+                        )
+        except AttributeError:
+            # using_macos_native_sim not available in this version
+            logging.debug("Could not detect Mac native LTspice version")
+
     runner = SimRunner(
         simulator=LTspice, output_folder=args.output_folder, verbose=True
     )
-    runner.run(output_asc)
+    runner.run(simulation_file)
     runner.wait_completion()
     logging.info("Simulation completed. Results in folder %s", args.output_folder)
 
