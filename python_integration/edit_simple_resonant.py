@@ -31,6 +31,8 @@ def main():
 
     logging.basicConfig(level=logging.INFO)
     editor = AscEditor(args.input)
+    # Ensure fresh netlist load before applying parameter overrides
+    editor.reset_netlist()
 
     # Apply parameter overrides if provided
     if args.params:
@@ -41,7 +43,6 @@ def main():
                 editor.set_component_parameters(comp, Value=val)
 
     # Add AC analysis and measurement directives
-    editor.reset_netlist()
     editor.add_instructions(".ac dec 100 1 100k", ".meas AC Gain MAX mag(V(out))")
 
     output_asc = args.output or args.input.replace(".asc", "_sim.asc")
