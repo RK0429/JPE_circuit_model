@@ -175,3 +175,5 @@ cython_debug/
 
 # Large files
 raw_data/
+
+.DS_Store
