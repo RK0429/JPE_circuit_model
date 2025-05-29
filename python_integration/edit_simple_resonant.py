@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Script to simulate a simple RLC resonant circuit ASC file."""
+import argparse
+import logging
+
+from cespy import AscEditor, LTspice, SimRunner
+
+
+def main():
+    """Main function to run the simple resonant circuit simulation."""
+    parser = argparse.ArgumentParser(
+        description="Simulate a simple RLC resonant circuit ASC file"
+    )
+    parser.add_argument("input", help="Path to input .asc file")
+    parser.add_argument(
+        "-o", "--output", default=None, help="Path to output modified .asc file"
+    )
+    parser.add_argument(
+        "--output-folder",
+        default="resonant_sim_results",
+        help="Simulation output folder",
+    )
+    parser.add_argument(
+        "-p",
+        "--params",
+        nargs="*",
+        default=None,
+        help="Optional component parameter overrides (e.g. R1=20n,L1=1m)",
+    )
+    args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO)
+    editor = AscEditor(args.input)
+    # Ensure fresh netlist load before applying parameter overrides
+    editor.reset_netlist()
+
+    # Apply parameter overrides if provided
+    if args.params:
+        for param in args.params:
+            if "=" in param:
+                comp, val = param.split("=", 1)
+                logging.info("Setting component %s value to %s", comp, val)
+                editor.set_component_parameters(comp, Value=val)
+
+    # Add AC analysis and measurement directives
+    editor.add_instructions(".ac dec 100 1 100k", ".meas AC Gain MAX mag(V(out))")
+
+    output_asc = args.output or args.input.replace(".asc", "_sim.asc")
+    editor.save_netlist(output_asc)
+    logging.info("Modified ASC saved to %s", output_asc)
+
+    runner = SimRunner(
+        simulator=LTspice, output_folder=args.output_folder, verbose=True
+    )
+    runner.run(output_asc)
+    runner.wait_completion()
+    logging.info("Simulation completed. Results in folder %s", args.output_folder)
+
+
+if __name__ == "__main__":
+    main()

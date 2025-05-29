@@ -26,9 +26,8 @@ GAMMA: float = 2 * constants.e / constants.hbar / N_BOTTOM_MIDDLE
 
 
 def series_sum(*impedances: complex | np.ndarray) -> complex | np.ndarray:
-    """
-    Calculate the sum of impedances in series, supporting complex scalars and arrays.
-    """
+    """Calculate the sum of impedances in series, supporting complex scalars and
+    arrays."""
     # Initialize result with zero (scalar or array depending on first impedance)
     if not impedances:
         return np.array([], dtype=complex)
@@ -39,14 +38,11 @@ def series_sum(*impedances: complex | np.ndarray) -> complex | np.ndarray:
 
 
 def parallel_sum(*impedances: complex | np.ndarray) -> np.ndarray:
-    """
-    Calculate the total impedance of parallel impedances.
+    """Calculate the total impedance of parallel impedances.
 
-    Parameters:
-        *impedances (complex or np.ndarray): Impedances in parallel.
+    Parameters:     *impedances (complex or np.ndarray): Impedances in parallel.
 
-    Returns:
-        np.ndarray: Total parallel impedance.
+    Returns:     np.ndarray: Total parallel impedance.
     """
     susceptances = [1 / z for z in impedances]
     total_susceptance = sum(susceptances)
@@ -78,9 +74,7 @@ def mesa_impedance(
     L_FG: float,
     N: int,
 ) -> Tuple[complex | np.ndarray, ...]:
-    """
-    Calculate various impedance components of the Mesa and total impedance.
-    """
+    """Calculate various impedance components of the Mesa and total impedance."""
     V_bottom = VOLTAGE_RATIO * V
     R_out = series_sum(R_ext, R_gnd, R_mid, R_FG)
     L_out = series_sum(L_ext, L_FG)
@@ -127,9 +121,7 @@ def output_power(
     L_FG: float,
     N: int,
 ) -> np.ndarray:
-    """
-    Calculate the output power based on model parameters and input data.
-    """
+    """Calculate the output power based on model parameters and input data."""
     Z_C, Z_res, Z_top, Z_bottom, Z_out, Z_tot = mesa_impedance(
         V,
         R_int,

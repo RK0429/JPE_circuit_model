@@ -23,22 +23,17 @@ UNIT_FACTORS: dict[str, float] = {"W": 1, "mW": 1e3, "uW": 1e6, "nW": 1e9, "pW":
 
 
 def configure_logging(level: int = logging.INFO) -> None:
-    """
-    Configure root logger with standard formatting.
-    """
+    """Configure root logger with standard formatting."""
     logging.basicConfig(level=level, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 def load_data(filename: str, delimiter: str = r"\s+") -> pd.DataFrame:
-    """
-    Load data from a text file into a Pandas DataFrame.
+    """Load data from a text file into a Pandas DataFrame.
 
-    Parameters:
-        filename (str): Path to the input text file.
-        delimiter (str): Separator pattern or regex for pd.read_csv.
+    Parameters:     filename (str): Path to the input text file.     delimiter (str):
+    Separator pattern or regex for pd.read_csv.
 
-    Returns:
-        pd.DataFrame: Loaded DataFrame.
+    Returns:     pd.DataFrame: Loaded DataFrame.
     """
     try:
         df = pd.read_csv(filename, sep=delimiter)
@@ -50,9 +45,7 @@ def load_data(filename: str, delimiter: str = r"\s+") -> pd.DataFrame:
 
 
 def rename_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Rename common column patterns to standardized names.
-    """
+    """Rename common column patterns to standardized names."""
     rename_map = {
         "V(nd)": "V(nt)",
         "V(n10)": "V(nt)",
@@ -69,17 +62,14 @@ def process_data(
     resample_freq: str = "1N",
     skip_resampling: bool = False,
 ) -> pd.DataFrame:
-    """
-    Process the DataFrame by calculating power and resampling on the time index.
+    """Process the DataFrame by calculating power and resampling on the time index.
 
-    Parameters:
-        df (pd.DataFrame): Original DataFrame.
-        time_unit (str): Unit for time conversion (e.g. 's', 'us').
-        resample_freq (str): Pandas offset alias for resampling frequency.
-        skip_resampling (bool): Skip time conversion and resampling.
+    Parameters:     df (pd.DataFrame): Original DataFrame.     time_unit (str): Unit for
+    time conversion (e.g. 's', 'us').     resample_freq (str): Pandas offset alias for
+    resampling frequency.     skip_resampling (bool): Skip time conversion and
+    resampling.
 
-    Returns:
-        pd.DataFrame: Processed DataFrame with power and resampled time.
+    Returns:     pd.DataFrame: Processed DataFrame with power and resampled time.
     """
     df_copy = df.copy()
     # Calculate power if not present
@@ -113,9 +103,7 @@ def process_data(
 
 
 def configure_plotting() -> None:
-    """
-    Set global matplotlib plotting parameters.
-    """
+    """Set global matplotlib plotting parameters."""
     plt.rcParams["font.family"] = FONT_FAMILY
     plt.rcParams["mathtext.fontset"] = MATH_FONTSET
     plt.rcParams["mathtext.default"] = MATH_DEFAULT
@@ -129,15 +117,12 @@ def plot_dc_sweep(
     ylim: Optional[Tuple[float, float]] = None,
     output_path: Optional[str] = None,
 ) -> None:
-    """
-    Plot DC sweep results: power vs voltage and current vs voltage.
+    """Plot DC sweep results: power vs voltage and current vs voltage.
 
-    Parameters:
-        df (pd.DataFrame): Processed DataFrame.
-        output_unit (str): Unit for power plotting.
-        xlim (Tuple[float,float]): X-axis limits.
-        ylim (Optional[Tuple[float,float]]): Y-axis limits.
-        output_path (Optional[str]): File path to save the figure.
+    Parameters:     df (pd.DataFrame): Processed DataFrame.     output_unit (str): Unit
+    for power plotting.     xlim (Tuple[float,float]): X-axis limits.     ylim
+    (Optional[Tuple[float,float]]): Y-axis limits.     output_path (Optional[str]): File
+    path to save the figure.
     """
     required = {"V(nt)", "V(na)", "power", "I(Rgnd)"}
     missing = required - set(df.columns)
@@ -228,9 +213,7 @@ def plot_temperature_time(df: pd.DataFrame, output_path: Optional[str] = None) -
 
 
 def save_data(df: pd.DataFrame, output_file: str) -> None:
-    """
-    Save DataFrame to file with tab delimiter.
-    """
+    """Save DataFrame to file with tab delimiter."""
     output_path = Path(output_file)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_path, sep="\t", index=True)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # coding: utf-8
-# type: ignore
+
 
 from __future__ import annotations
 
@@ -38,18 +38,14 @@ PLOT_PATH = PLOTS_DIR / "dc_sweep_JPE_phase.pdf"
 
 
 def load_data(file_path: str) -> pd.DataFrame:
-    """
-    Load data from a whitespace-delimited text file into a Pandas DataFrame.
+    """Load data from a whitespace-delimited text file into a Pandas DataFrame.
 
-    Parameters:
-        file_path (str): Path to the input text file.
+    Parameters:     file_path (str): Path to the input text file.
 
-    Returns:
-        pd.DataFrame: Loaded DataFrame.
+    Returns:     pd.DataFrame: Loaded DataFrame.
 
-    Raises:
-        FileNotFoundError: If the file does not exist.
-        pd.errors.ParserError: If there's an error parsing the file.
+    Raises:     FileNotFoundError: If the file does not exist.
+    pd.errors.ParserError: If there's an error parsing the file.
     """
     try:
         df = pd.read_csv(file_path, sep=r"\s+")  # type: ignore[call-overload]
@@ -68,18 +64,14 @@ def load_data(file_path: str) -> pd.DataFrame:
 
 
 def process_data(df: pd.DataFrame, resample_interval: str = "100us") -> pd.DataFrame:
-    """
-    Process the DataFrame by computing phase differences, power, and resampling.
+    """Process the DataFrame by computing phase differences, power, and resampling.
 
-    Parameters:
-        df (pd.DataFrame): Original DataFrame.
-        resample_interval (str): Resample interval for data (pandas offset alias).
+    Parameters:     df (pd.DataFrame): Original DataFrame.     resample_interval (str):
+    Resample interval for data (pandas offset alias).
 
-    Returns:
-        pd.DataFrame: Processed and resampled DataFrame.
+    Returns:     pd.DataFrame: Processed and resampled DataFrame.
 
-    Raises:
-        KeyError: If required columns are missing.
+    Raises:     KeyError: If required columns are missing.
     """
     df_processed = df.copy()
 
@@ -141,20 +133,16 @@ def plot_data(
     xlim: Optional[tuple[float, float]] = None,
     radius: float = R_RAD,
 ) -> Figure:
-    """
-    Plot Delta Phase and Power over Time using twin y-axes.
+    """Plot Delta Phase and Power over Time using twin y-axes.
 
-    Parameters:
-        df_resampled (pd.DataFrame): Processed DataFrame.
-        plot_path (Optional[str]): Path to save the plot. If None, plot is not saved.
-        xlim (Optional[tuple[float, float]]): Two-element tuple specifying the x-axis limits, e.g. (xmin, xmax).
-        radius (float): Resistance value for power calculation.
+    Parameters:     df_resampled (pd.DataFrame): Processed DataFrame.     plot_path
+    (Optional[str]): Path to save the plot. If None, plot is not saved.     xlim
+    (Optional[tuple[float, float]]): Two-element tuple specifying the x-axis limits,
+    e.g. (xmin, xmax).     radius (float): Resistance value for power calculation.
 
-    Returns:
-        matplotlib.figure.Figure: The created figure.
+    Returns:     matplotlib.figure.Figure: The created figure.
 
-    Raises:
-        KeyError: If required columns are missing.
+    Raises:     KeyError: If required columns are missing.
     """
     required_columns = ["time", "V(nphase1)", "V(nphase2)", "power"]
     missing_columns = [
@@ -227,12 +215,10 @@ def plot_data(
 
 
 def save_data(df: pd.DataFrame, file_path: str) -> None:
-    """
-    Save the DataFrame to a text file with tab delimiter.
+    """Save the DataFrame to a text file with tab delimiter.
 
-    Parameters:
-        df (pd.DataFrame): DataFrame to save.
-        file_path (str): Path to save the DataFrame.
+    Parameters:     df (pd.DataFrame): DataFrame to save.     file_path (str): Path to
+    save the DataFrame.
     """
     try:
         df.to_csv(file_path, sep="\t", index=True)

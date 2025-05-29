@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-"""
-CLI entry point for R_int fitting analysis.
-"""
+"""CLI entry point for R_int fitting analysis."""
 
 import argparse
 import logging
