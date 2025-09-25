@@ -1,68 +1,154 @@
-#!/usr/bin/env python
-# coding: utf-8
+"""Numerical solvers used in the internal resistance fitting workflow."""
+
+from __future__ import annotations
 
 import logging
-from typing import cast
+from collections.abc import Callable
+from dataclasses import dataclass
 
 import numpy as np
-from scipy.optimize import root  # type: ignore
+from numpy.typing import NDArray
+from scipy.optimize import OptimizeResult, root
 
-from fitting.R_int.model import P2T, T2R_int, T2R_th
+from .model import (
+    internal_resistance_from_temperature,
+    temperature_from_power,
+    thermal_resistance_from_temperature,
+)
+
+LOGGER = logging.getLogger(__name__)
+
+FloatArray = NDArray[np.float64]
 
 
-def solve4T(
-    T: float, P: float, alpha: float, beta: float, gamma: float, T_bath: float
+@dataclass(frozen=True)
+class ModelParameters:
+    coeff_a: float
+    coeff_b: float
+    coeff_c: float
+    coeff_d: float
+    alpha: float
+    beta: float
+    gamma: float
+    bath_temperature: float
+
+
+def temperature_residual(
+    temperature: float,
+    *,
+    power: float,
+    parameters: ModelParameters,
 ) -> float:
-    """Solve for temperature residual given power and parameters."""
-    R_th = cast(float, T2R_th(T, alpha, beta, gamma))
-    T_calc = cast(float, P2T(P, R_th, T_bath))
-    return T - T_calc
+    """Residual used to solve for the device temperature."""
+    thermal_resistance = float(
+        thermal_resistance_from_temperature(
+            temperature,
+            parameters.alpha,
+            parameters.beta,
+            parameters.gamma,
+        )
+    )
+    predicted_temperature = float(
+        temperature_from_power(
+            power,
+            thermal_resistance,
+            parameters.bath_temperature,
+        )
+    )
+    return temperature - predicted_temperature
 
 
-def solve4V_int(
-    V_int: float,
-    I_int: float,
-    A: float,
-    B: float,
-    C: float,
-    D: float,
+def internal_voltage_residual(
+    voltage: float,
+    current: float,
+    parameters: ModelParameters,
+    *,
+    temperature_solver: Callable[[float, ModelParameters], OptimizeResult] | None = None,
+) -> float:
+    """Residual used to solve for the internal voltage."""
+    def _default_temperature_solver(
+        power: float,
+        model_parameters: ModelParameters,
+    ) -> OptimizeResult:
+        def _vector_residual(temp_vec: NDArray[np.float64]) -> NDArray[np.float64]:
+            value = temperature_residual(
+                float(temp_vec[0]),
+                power=power,
+                parameters=model_parameters,
+            )
+            return np.asarray([value], dtype=np.float64)
+
+        return root(_vector_residual, x0=np.asarray([30.0], dtype=np.float64))
+
+    solver = temperature_solver or _default_temperature_solver
+
+    power = voltage * current
+    solution = solver(power, parameters)
+
+    if hasattr(solution, "success") and not solution.success:
+        LOGGER.warning(
+            "Temperature root finding did not converge for voltage=%s, current=%s",
+            voltage,
+            current,
+        )
+
+    temperature_value = float(solution.x[0])
+    internal_resistance = float(
+        internal_resistance_from_temperature(
+            temperature_value,
+            parameters.coeff_a,
+            parameters.coeff_b,
+            parameters.coeff_c,
+            parameters.coeff_d,
+        )
+    )
+    return voltage - internal_resistance * current
+
+
+def current_to_internal_voltage(  # noqa: PLR0913 - lmfit requires explicit parameters
+    currents: FloatArray,
+    *,
+    coeff_a: float,
+    coeff_b: float,
+    coeff_c: float,
+    coeff_d: float,
     alpha: float,
     beta: float,
     gamma: float,
-    T_bath: float,
-) -> float:
-    """Function to solve for V_int given I_int and model parameters."""
-    P = V_int * I_int
-    sol = root(fun=solve4T, x0=30.0, args=(P, alpha, beta, gamma, T_bath))
-    if not sol.success:
-        logging.warning(
-            f"Root finding did not converge for V_int={V_int}, I_int={I_int}."
-        )
-    T_val = sol.x[0]
-    R_int = cast(float, T2R_int(T_val, A, B, C, D))
-    return V_int - R_int * I_int
+    bath_temperature: float,
+) -> FloatArray:
+    """Return the internal voltage corresponding to ``currents``."""
+    voltages = np.empty_like(currents)
+    parameters = ModelParameters(
+        coeff_a=coeff_a,
+        coeff_b=coeff_b,
+        coeff_c=coeff_c,
+        coeff_d=coeff_d,
+        alpha=alpha,
+        beta=beta,
+        gamma=gamma,
+        bath_temperature=bath_temperature,
+    )
 
+    for index, current in enumerate(currents):
+        def _voltage_residual_vector(
+            volt_vec: NDArray[np.float64],
+            current_value: float = current,
+        ) -> NDArray[np.float64]:
+            value = internal_voltage_residual(
+                float(volt_vec[0]),
+                current_value,
+                parameters,
+            )
+            return np.asarray([value], dtype=np.float64)
 
-def I_int2V_int(
-    I_ints: np.ndarray,
-    A: float,
-    B: float,
-    C: float,
-    D: float,
-    alpha: float,
-    beta: float,
-    gamma: float,
-    T_bath: float,
-) -> np.ndarray:
-    """Calculate V_int array from I_int array using root finding."""
-    V_int = np.empty_like(I_ints)
-    for i, I in enumerate(I_ints):
-        sol = root(
-            fun=solve4V_int, x0=20e-3, args=(I, A, B, C, D, alpha, beta, gamma, T_bath)
+        solution = root(
+            _voltage_residual_vector,
+            x0=np.asarray([20e-3], dtype=np.float64),
         )
-        if sol.success:
-            V_int[i] = sol.x[0]
+        if solution.success:
+            voltages[index] = solution.x[0]
         else:
-            logging.warning(f"Root finding did not converge for I_int={I}.")
-            V_int[i] = np.nan
-    return V_int
+            LOGGER.warning("Voltage root finding did not converge for current=%s", current)
+            voltages[index] = np.nan
+    return voltages

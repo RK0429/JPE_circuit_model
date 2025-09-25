@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-# coding: utf-8
 from __future__ import annotations
 
 import argparse
 import logging
 from pathlib import Path
-from typing import Optional, Tuple
 
 import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib import gridspec
+from pandas import to_timedelta
+from pandas.api.types import is_datetime64_any_dtype, is_timedelta64_dtype
 
 # Constants
 FONT_FAMILY = "Times New Roman"
@@ -20,6 +20,13 @@ R_RAD = 8.537  # Resistance value for power calculation
 
 # Unit conversion factors for power plotting
 UNIT_FACTORS: dict[str, float] = {"W": 1, "mW": 1e3, "uW": 1e6, "nW": 1e9, "pW": 1e12}
+
+
+class InvalidOutputUnitError(ValueError):
+    """Raised when an unsupported output unit is requested."""
+
+    def __init__(self, unit: str) -> None:
+        super().__init__(f"Invalid output unit: {unit}")
 
 
 def configure_logging(level: int = logging.INFO) -> None:
@@ -37,11 +44,12 @@ def load_data(filename: str, delimiter: str = r"\s+") -> pd.DataFrame:
     """
     try:
         df = pd.read_csv(filename, sep=delimiter)
-        logging.info("Data loaded from %s", filename)
-        return df
     except Exception:
         logging.exception("Failed to load data from %s", filename)
         raise
+    else:
+        logging.info("Data loaded from %s", filename)
+        return df
 
 
 def rename_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -113,9 +121,9 @@ def configure_plotting() -> None:
 def plot_dc_sweep(
     df: pd.DataFrame,
     output_unit: str = "uW",
-    xlim: Tuple[float, float] = (-0.05, 1.5),
-    ylim: Optional[Tuple[float, float]] = None,
-    output_path: Optional[str] = None,
+    xlim: tuple[float, float] = (-0.05, 1.5),
+    ylim: tuple[float, float] | None = None,
+    output_path: str | None = None,
 ) -> None:
     """Plot DC sweep results: power vs voltage and current vs voltage.
 
@@ -127,10 +135,11 @@ def plot_dc_sweep(
     required = {"V(nt)", "V(na)", "power", "I(Rgnd)"}
     missing = required - set(df.columns)
     if missing:
-        raise KeyError(f"Missing columns for DC sweep plot: {missing}")
+        raise KeyError(tuple(missing))
 
-    if output_unit not in UNIT_FACTORS:
-        raise ValueError(f"Invalid output_unit '{output_unit}'")
+    factor = UNIT_FACTORS.get(output_unit)
+    if factor is None:
+        raise InvalidOutputUnitError(output_unit)
 
     configure_plotting()
     fig = plt.figure(figsize=(8, 8))
@@ -142,7 +151,7 @@ def plot_dc_sweep(
     ax_body = fig.add_subplot(spec[2], sharex=ax_top, sharey=ax_side)
 
     delta_v = df["V(nt)"] - df["V(na)"]
-    power_scaled = df["power"] * R_RAD * UNIT_FACTORS[output_unit]
+    power_scaled = df["power"] * R_RAD * factor
     current_scaled = df["I(Rgnd)"] * 1e3  # mA
 
     ax_top.grid(ls="--")
@@ -180,20 +189,20 @@ def plot_dc_sweep(
     plt.show()
 
 
-def plot_temperature_time(df: pd.DataFrame, output_path: Optional[str] = None) -> None:
+def plot_temperature_time(df: pd.DataFrame, output_path: str | None = None) -> None:
     # 1) Ensure 'time' is a timedelta relative to start
     if "time" in df.columns:
-        if pd.api.types.is_datetime64_any_dtype(df["time"]):
+        if is_datetime64_any_dtype(df["time"]):
             # Convert datetime to elapsed timedelta since first timestamp
-            df["time"] = df["time"] - df["time"].iloc[0]
-        elif not pd.api.types.is_timedelta64_dtype(df["time"]):
-            df["time"] = pd.to_timedelta(df["time"], errors="raise")
+            df["time"] -= df["time"].iloc[0]
+        elif not is_timedelta64_dtype(df["time"]):
+            df["time"] = to_timedelta(df["time"], errors="raise")
 
     # 2) Choose x-axis values (seconds here)
     x = df["time"].dt.total_seconds()
 
     if "V(t)" not in df.columns:
-        raise KeyError("'V(t)' column not found in DataFrame")
+        raise KeyError("V(t)")
 
     # 3) Plot
     fig, ax = plt.subplots(figsize=(10, 6))

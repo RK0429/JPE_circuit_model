@@ -1,181 +1,257 @@
-#!/usr/bin/env python
-# coding: utf-8
+"""Plotting helpers for antenna parameter analyses."""
+
+from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Protocol
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.gridspec import GridSpec
+from numpy.typing import NDArray
+
+LOGGER = logging.getLogger(__name__)
+
+FloatArray = NDArray[np.float64]
+
+
+@dataclass(frozen=True)
+class FittingSeries:
+    """Voltage/power series used for the 1D fitting plots."""
+
+    voltage: FloatArray
+    power: FloatArray
+
+
+@dataclass(frozen=True)
+class FittingLabels:
+    """Optional label overrides for the fitting plot."""
+
+    experimental: str = "Experimental"
+    calculated: str = "Calculated"
+    xlabel: str = "Voltage [V]"
+    ylabel: str = "Output Power [μW]"
+
+
+@dataclass(frozen=True)
+class ComplexFigureData:
+    """Container for voltage, current, and power traces."""
+
+    voltage: FloatArray
+    current: FloatArray
+    power: FloatArray
+
+
+class SupportsSb(Protocol):
+    """Protocol describing objects exposing the ``Sb`` scaling constant."""
+
+    @property
+    def Sb(self) -> float:  # noqa: N802
+        ...
+
+
+def _configure_style() -> None:
+    plt.rcParams.update(
+        {
+            "font.family": "Times New Roman",
+            "mathtext.fontset": "cm",
+            "mathtext.default": "it",
+            "font.size": 15,
+        }
+    )
 
 
 def plot_fitting_results(
-    V: np.ndarray,
-    BO_exp_scaled: np.ndarray,
-    RP_cal: np.ndarray,
-    fig_path: str,
-    label_exp: str = "Experimental",
-    label_cal: str = "Calculated",
-    xlabel: str = "Voltage [V]",
-    ylabel: str = "Output Power [units]",
-):
-    """Plot experimental and calculated output power against voltage and save the
-    figure."""
+    experimental: FittingSeries,
+    calculated: FittingSeries,
+    *,
+    figure_path: str,
+    labels: FittingLabels | None = None,
+) -> None:
+    """Plot experimental and calculated output power against voltage."""
+    label_config = labels or FittingLabels()
     plt.figure(figsize=(8, 6))
-    plt.scatter(V, BO_exp_scaled * 1e6, label=label_exp, s=5)
-    plt.scatter(V, RP_cal * 1e6, label=label_cal, s=5)
-    plt.grid(True)
+    plt.scatter(
+        experimental.voltage,
+        experimental.power * 1e6,
+        label=label_config.experimental,
+        s=5,
+    )
+    plt.scatter(
+        calculated.voltage,
+        calculated.power * 1e6,
+        label=label_config.calculated,
+        s=5,
+    )
+    plt.grid(True, linestyle="--", linewidth=0.5)
     plt.legend()
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
+    plt.xlabel(label_config.xlabel)
+    plt.ylabel(label_config.ylabel)
     plt.tight_layout()
-    plt.savefig(fig_path)
-    logging.info("Fitting results plot saved to %s.", fig_path)
+    plt.savefig(figure_path)
+    LOGGER.info("Fitting results plot saved to %s", figure_path)
     plt.show()
 
 
 def plot_complex_figure(
-    V_exp: np.ndarray,
-    I_exp: np.ndarray,
-    RP_exp: np.ndarray,
-    V_cal: np.ndarray,
-    I_cal: np.ndarray,
-    RP_cal: np.ndarray,
-    fig_path: str,
-    constants,
-    epsilon: float = 5000,
-    show_exp: bool = True,
-):
-    """Create and save a complex figure with multiple subplots for voltage, current, and
-    power relationships."""
-    plt.rcParams["font.family"] = "Times New Roman"
-    plt.rcParams["mathtext.fontset"] = "cm"
-    plt.rcParams["mathtext.default"] = "it"
-    plt.rcParams["font.size"] = 15
+    experimental: ComplexFigureData,
+    calculated: ComplexFigureData,
+    *,
+    figure_path: str,
+    constants: SupportsSb,
+    epsilon: float = 5000.0,
+    show_experimental: bool = True,
+) -> None:
+    """Create a composite figure showing voltage, current, and power relationships."""
+    _configure_style()
 
-    fig = plt.figure(figsize=(8, 8))
-    spec = GridSpec(ncols=2, nrows=2, width_ratios=[5, 2], height_ratios=[2, 5])
+    figure = plt.figure(figsize=(8, 8))
+    grid = GridSpec(ncols=2, nrows=2, width_ratios=[5, 2], height_ratios=[2, 5])
 
-    ax_top = fig.add_subplot(spec[0])
-    ax_side = fig.add_subplot(spec[3])
-    ax_body = fig.add_subplot(spec[2], sharex=ax_top, sharey=ax_side)
+    axis_top = figure.add_subplot(grid[0])
+    axis_side = figure.add_subplot(grid[3])
+    axis_body = figure.add_subplot(grid[2], sharex=axis_top, sharey=axis_side)
 
-    # Top plot
-    ax_top.grid(ls="--")
-    if show_exp:
-        ax_top.scatter(
-            V_exp,
-            RP_exp / constants.Sb * epsilon * 1e6,
-            label="Calculated",
+    axis_top.grid(ls="--")
+    if show_experimental:
+        axis_top.scatter(
+            experimental.voltage,
+            experimental.power / constants.Sb * epsilon * 1e6,
+            label="Experimental",
             s=5,
             c="gray",
         )
-    ax_top.scatter(V_cal, RP_cal * 1e6, s=5, c=RP_cal * 1e6, cmap="jet")
-    ax_top.set_ylabel("Output Power [μW]")
-    ax_top.yaxis.set_label_coords(-0.1, 0.5)
-    ax_top.set_xlim(-0.05, 1.5)
+    axis_top.scatter(
+        calculated.voltage,
+        calculated.power * 1e6,
+        s=5,
+        c=calculated.power * 1e6,
+        cmap="jet",
+    )
+    axis_top.set_ylabel("Output Power [μW]")
+    axis_top.yaxis.set_label_coords(-0.1, 0.5)
+    axis_top.set_xlim(-0.05, 1.5)
 
-    # Side plot
-    ax_side.grid(ls="--")
-    if show_exp:
-        ax_side.scatter(
-            RP_exp / constants.Sb * epsilon * 1e6,
-            I_exp,
-            label="Calculated",
+    axis_side.grid(ls="--")
+    if show_experimental:
+        axis_side.scatter(
+            experimental.power / constants.Sb * epsilon * 1e6,
+            experimental.current,
+            label="Experimental",
             s=5,
             c="gray",
         )
-    ax_side.scatter(RP_cal * 1e6, I_cal, s=5, c=RP_cal * 1e6, cmap="jet")
-    ax_side.set_xlabel("Output Power [μW]")
-    ax_side.set_ylim(0, 45)
-    ax_side.set_yticks(np.arange(0, 50, 10))
+    axis_side.scatter(
+        calculated.power * 1e6,
+        calculated.current,
+        s=5,
+        c=calculated.power * 1e6,
+        cmap="jet",
+    )
+    axis_side.set_xlabel("Output Power [μW]")
+    axis_side.set_ylim(0, 45)
+    axis_side.set_yticks(np.arange(0, 50, 10))
 
-    # Body plot
-    ax_body.grid(ls="--")
-    if show_exp:
-        ax_body.scatter(V_exp, I_exp, s=5, c="gray")
-    ax_body.scatter(V_cal, I_cal, s=5, c=RP_cal * 1e6, cmap="jet")
-    ax_body.set_xlabel("Voltage [V]")
-    ax_body.set_ylabel("Current [mA]")
-    ax_body.yaxis.set_label_coords(-0.1, 0.5)
-    ax_body.set_xlim(-0.05, 1.5)
-    ax_body.set_ylim(0, 45)
-    ax_body.set_xticks([0, 0.25, 0.5, 0.75, 1, 1.25])
-    ax_body.set_yticks(np.arange(0, 50, 10))
+    axis_body.grid(ls="--")
+    if show_experimental:
+        axis_body.scatter(experimental.voltage, experimental.current, s=5, c="gray")
+    axis_body.scatter(
+        calculated.voltage,
+        calculated.current,
+        s=5,
+        c=calculated.power * 1e6,
+        cmap="jet",
+    )
+    axis_body.set_xlabel("Voltage [V]")
+    axis_body.set_ylabel("Current [mA]")
+    axis_body.yaxis.set_label_coords(-0.1, 0.5)
+    axis_body.set_xlim(-0.05, 1.5)
+    axis_body.set_ylim(0, 45)
+    axis_body.set_xticks(np.linspace(0, 1.25, 6))
+    axis_body.set_yticks(np.arange(0, 50, 10))
 
-    fig.tight_layout()
-    plt.setp(ax_top.get_xticklabels(), visible=False)
-    plt.setp(ax_side.get_yticklabels(), visible=False)
+    figure.tight_layout()
+    plt.setp(axis_top.get_xticklabels(), visible=False)
+    plt.setp(axis_side.get_yticklabels(), visible=False)
     plt.subplots_adjust(hspace=0.0, wspace=0.0)
 
-    plt.savefig(fig_path)
-    logging.info("Complex figure saved to %s.", fig_path)
+    plt.savefig(figure_path)
+    LOGGER.info("Complex figure saved to %s", figure_path)
     plt.show()
 
 
 def plot_txt_data(
-    df: pd.DataFrame,
-    fig_path: str,
-    epsilon: float = 5000,
-    Rrad: float = 62.69,
-):
-    """Plot the data from the text file in a complex figure."""
-    plt.rcParams["font.family"] = "Times New Roman"
-    plt.rcParams["mathtext.fontset"] = "cm"
-    plt.rcParams["mathtext.default"] = "it"
-    plt.rcParams["font.size"] = 15
+    dataframe: pd.DataFrame,
+    *,
+    figure_path: str,
+    epsilon: float = 5000.0,
+    radiation_resistance: float = 62.69,
+    voltage_columns: Sequence[str] = ("V(nt)", "V(na)"),
+    current_column: str = "I(Rfg)",
+    power_column: str = "power",
+) -> None:
+    """Render a composite figure from the simulated text output."""
+    _configure_style()
 
-    fig = plt.figure(figsize=(8, 8))
-    spec = GridSpec(ncols=2, nrows=2, width_ratios=[5, 2], height_ratios=[2, 5])
+    figure = plt.figure(figsize=(8, 8))
+    grid = GridSpec(ncols=2, nrows=2, width_ratios=[5, 2], height_ratios=[2, 5])
 
-    ax_top = fig.add_subplot(spec[0])
-    ax_side = fig.add_subplot(spec[3])
-    ax_body = fig.add_subplot(spec[2], sharex=ax_top, sharey=ax_side)
+    axis_top = figure.add_subplot(grid[0])
+    axis_side = figure.add_subplot(grid[3])
+    axis_body = figure.add_subplot(grid[2], sharex=axis_top, sharey=axis_side)
 
-    # Top plot
-    ax_top.grid(ls="--")
-    ax_top.scatter(
-        df["V(nt)"] - df["V(na)"],
-        df["power"] * Rrad * 1e6,
+    voltage_difference = dataframe[voltage_columns[0]].to_numpy() - dataframe[
+        voltage_columns[1]
+    ].to_numpy()
+    scaled_power = (
+        dataframe[power_column].to_numpy() * radiation_resistance * epsilon * 1e6
+    )
+    scaled_current = -dataframe[current_column].to_numpy() * 1e3
+
+    axis_top.grid(ls="--")
+    axis_top.scatter(
+        voltage_difference,
+        scaled_power,
         s=5,
-        c=df["power"] * Rrad * 1e6,
+        c=scaled_power,
         cmap="jet",
     )
-    ax_top.set_xlim(-0.05, 1.5)
-    ax_top.set_ylabel(r"Output Power [$μ$W]")
-    ax_top.yaxis.set_label_coords(-0.1, 0.5)
+    axis_top.set_xlim(-0.05, 1.5)
+    axis_top.set_ylabel(r"Output Power [$μ$W]")
+    axis_top.yaxis.set_label_coords(-0.1, 0.5)
 
-    # Side plot
-    ax_side.grid(ls="--")
-    ax_side.scatter(
-        df["power"] * Rrad * 1e6,
-        -df["I(Rfg)"] * 1e3,
+    axis_side.grid(ls="--")
+    axis_side.scatter(
+        scaled_power,
+        scaled_current,
         s=5,
-        c=df["power"] * Rrad * 1e6,
+        c=scaled_power,
         cmap="jet",
     )
-    ax_side.set_xlabel(r"Output Power [$μ$W]")
+    axis_side.set_xlabel(r"Output Power [$μ$W]")
 
-    # Body plot
-    ax_body.grid(ls="--")
-    ax_body.scatter(
-        df["V(nt)"] - df["V(na)"],
-        -df["I(Rfg)"] * 1e3,
+    axis_body.grid(ls="--")
+    axis_body.scatter(
+        voltage_difference,
+        scaled_current,
         s=5,
-        c=df["power"] * Rrad * 1e6,
+        c=scaled_power,
         cmap="jet",
     )
-    ax_body.set_xlabel("Voltage [V]")
-    ax_body.set_ylabel("Current [mA]")
-    ax_body.set_xticks([0, 0.25, 0.5, 0.75, 1, 1.25])
-    ax_body.set_xlim(-0.05, 1.5)
-    ax_body.yaxis.set_label_coords(-0.1, 0.5)
+    axis_body.set_xlabel("Voltage [V]")
+    axis_body.set_ylabel("Current [mA]")
+    axis_body.set_xticks(np.linspace(0, 1.25, 6))
+    axis_body.set_xlim(-0.05, 1.5)
+    axis_body.yaxis.set_label_coords(-0.1, 0.5)
 
-    fig.tight_layout()
-    plt.setp(ax_top.get_xticklabels(), visible=False)
-    plt.setp(ax_side.get_yticklabels(), visible=False)
+    figure.tight_layout()
+    plt.setp(axis_top.get_xticklabels(), visible=False)
+    plt.setp(axis_side.get_yticklabels(), visible=False)
     plt.subplots_adjust(hspace=0.0, wspace=0.0)
 
-    plt.savefig(fig_path)
-    logging.info("Text data plot saved to %s.", fig_path)
+    plt.savefig(figure_path)
+    LOGGER.info("Text data plot saved to %s", figure_path)
     plt.show()

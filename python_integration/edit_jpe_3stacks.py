@@ -4,7 +4,7 @@ their parameters."""
 import argparse
 import logging
 
-from python_integration.utils import modify_stacks, parse_params
+from python_integration.utils import SimulationConfig, modify_stacks, parse_params
 
 
 def main():
@@ -39,8 +39,10 @@ def main():
         "1stack",
         args.num,
         params_list,
-        args.simulate,
-        args.sim_output,
+        simulation=SimulationConfig(
+            enabled=args.simulate,
+            output_folder=args.sim_output,
+        ),
     )
 
 

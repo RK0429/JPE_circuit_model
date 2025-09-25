@@ -1,64 +1,81 @@
-#!/usr/bin/env python
-# coding: utf-8
+"""Antenna parameter fitting model including internal inductances."""
 
-from typing import Tuple
+# ruff: noqa: N803
+
+from __future__ import annotations
+
+from dataclasses import dataclass
 
 import numpy as np
+from numpy.typing import NDArray
+
+RealArray = NDArray[np.float64]
+ComplexArray = NDArray[np.complex128]
 
 
-class Constants:
-    """Physical constants used in the analysis."""
+@dataclass(frozen=True)
+class PhysicalConstants:
+    """Collection of physical constants used throughout the model."""
 
-    h: float = 6.62607015e-34  # Planck constant (J s)
-    hbar: float = h / (2 * np.pi)  # Reduced Planck constant
-    mu0: float = 1.25663706212e-6  # Vacuum permeability (H/m)
-    ep0: float = 8.8541878128e-12  # Vacuum permittivity (F/m)
-    e: float = 1.60217663e-19  # Elementary charge (C)
-    Sb: float = 1.75e5  # Specific constant used for scaling
+    e: float = 1.602_176_63e-19
+    h: float = 6.626_070_15e-34
+    mu_0: float = 1.256_637_062_12e-6
+    epsilon_0: float = 8.854_187_812_8e-12
+    Sb: float = 1.75e5
 
-
-constants = Constants()
-
-# Global parameters for voltage ratio and scaling
-N_BOTTOM_MIDDLE: int = 808
-VOLTAGE_RATIO: float = (43 + 159) / (15 + 43 + 159)
-GAMMA: float = 2 * constants.e / constants.hbar / N_BOTTOM_MIDDLE
+    @property
+    def hbar(self) -> float:
+        """Reduced Planck constant."""
+        return self.h / (2.0 * np.pi)
 
 
-def series_sum(*impedances: complex | np.ndarray) -> complex | np.ndarray:
-    """Calculate the sum of impedances in series, supporting complex scalars and
-    arrays."""
-    # Initialize result with zero (scalar or array depending on first impedance)
+constants = PhysicalConstants()
+
+_DEFAULT_STACKS = 808
+_DEFAULT_RATIO_NUMERATOR = 43.0 + 159.0
+_DEFAULT_RATIO_DENOMINATOR = 15.0 + _DEFAULT_RATIO_NUMERATOR
+_VOLTAGE_RATIO_BASE = _DEFAULT_RATIO_NUMERATOR / _DEFAULT_RATIO_DENOMINATOR
+
+GAMMA = 2.0 * constants.e / constants.hbar / _DEFAULT_STACKS
+
+
+class StackCountError(ValueError):
+    """Raised when an invalid stack count is provided to the model."""
+
+    def __init__(self, stack_count: int) -> None:
+        message = f"stack_count must be positive (received {stack_count})"
+        super().__init__(message)
+
+
+def _voltage_ratio(stack_count: int) -> float:
+    """Return the empirical bottom-voltage ratio for the given stack count."""
+    if stack_count <= 0:
+        raise StackCountError(stack_count)
+    return _VOLTAGE_RATIO_BASE
+
+
+def series_sum(*impedances: complex | ComplexArray) -> ComplexArray:
     if not impedances:
-        return np.array([], dtype=complex)
-    result = impedances[0]
-    for z in impedances[1:]:
-        result = result + z
-    return result
+        return np.asarray([], dtype=np.complex128)
+    total = np.asarray(impedances[0], dtype=np.complex128)
+    for impedance in impedances[1:]:
+        total += np.asarray(impedance, dtype=np.complex128)
+    return total
 
 
-def parallel_sum(*impedances: complex | np.ndarray) -> np.ndarray:
-    """Calculate the total impedance of parallel impedances.
-
-    Parameters:     *impedances (complex or np.ndarray): Impedances in parallel.
-
-    Returns:     np.ndarray: Total parallel impedance.
-    """
-    susceptances = [1 / z for z in impedances]
-    total_susceptance = sum(susceptances)
-
-    # Handle division by zero with small epsilon
-    epsilon = 1e-20
-    safe_susceptance = np.where(total_susceptance != 0, total_susceptance, epsilon)
-    Z_tot = 1.0 / safe_susceptance
-    Z_tot = np.where(total_susceptance != 0, Z_tot, np.inf)
-
-    return Z_tot
+def parallel_sum(*impedances: complex | ComplexArray) -> ComplexArray:
+    if not impedances:
+        return np.asarray([], dtype=np.complex128)
+    admittance = sum(1.0 / np.asarray(impedance, dtype=np.complex128) for impedance in impedances)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        total = np.where(admittance != 0.0, 1.0 / admittance, np.inf)
+    return np.asarray(total, dtype=np.complex128)
 
 
-def mesa_impedance(
-    V: np.ndarray,
-    R_int: np.ndarray,
+def mesa_impedance(  # noqa: PLR0913
+    voltage: RealArray,
+    internal_resistance: RealArray,
+    *,
     R: float,
     L: float,
     C: float,
@@ -73,45 +90,59 @@ def mesa_impedance(
     R_FG: float,
     L_FG: float,
     N: int,
-    L_int_t: float = 0.0,
-    L_int_b: float = 0.0,
-) -> Tuple[complex | np.ndarray, ...]:
-    """Calculate various impedance components of the Mesa and total impedance.
+    L_int_t: float,
+    L_int_b: float,
+) -> tuple[ComplexArray, ComplexArray, ComplexArray, ComplexArray, ComplexArray, ComplexArray]:
+    bottom_ratio = _voltage_ratio(N)
+    voltage_complex = np.asarray(voltage, dtype=np.complex128)
+    internal_complex = np.asarray(internal_resistance, dtype=np.complex128)
+    voltage_bottom = bottom_ratio * voltage_complex
 
-    Parameters:     V (np.ndarray): Voltage array.     R_int (np.ndarray): Internal
-    resistance array.     R, L, C, C_intt, C_intb, R_loss_t, R_loss_b, R_ext, L_ext,
-    R_gnd,     R_mid, R_FG, L_FG, N (float/int): Model parameters.     L_int_t, L_int_b
-    (float): Internal inductances (top and bottom).
-    """
-    V_bottom = VOLTAGE_RATIO * V
-    R_out = series_sum(R_ext, R_gnd, R_mid, R_FG)
-    L_out = series_sum(L_ext, L_FG)
-    Z_out = series_sum(R_out, 1j * V_bottom * L_out)
+    outer_resistance = series_sum(R_ext, R_gnd, R_mid, R_FG)
+    outer_inductance = series_sum(L_ext, L_FG)
+    outer_impedance = series_sum(outer_resistance, 1j * voltage_bottom * outer_inductance)
 
-    Z_C = -1j / (V_bottom * C)
-    Z_L = 1j * V_bottom * L
-    Z_res = series_sum(R, Z_L, Z_C)
+    capacitor_impedance = -1j / (voltage_bottom * C)
+    inductor_impedance = 1j * voltage_bottom * L
+    resonator_impedance = series_sum(R, inductor_impedance, capacitor_impedance)
 
-    Z_top = parallel_sum(
-        series_sum(R_loss_t, 1j * V_bottom * L_int_t, -1j / (V_bottom * C_intt)),
-        (1 - VOLTAGE_RATIO) * R_int,
+    top_impedance = parallel_sum(
+        series_sum(
+            R_loss_t,
+            1j * voltage_bottom * L_int_t,
+            -1j / (voltage_bottom * C_intt),
+        ),
+        (1.0 - bottom_ratio) * internal_complex,
     )
-    Z_bottom = parallel_sum(
-        series_sum(R_loss_b, 1j * V_bottom * L_int_b, -1j / (V_bottom * C_intb)),
-        VOLTAGE_RATIO * R_int,
+    bottom_impedance = parallel_sum(
+        series_sum(
+            R_loss_b,
+            1j * voltage_bottom * L_int_b,
+            -1j / (voltage_bottom * C_intb),
+        ),
+        bottom_ratio * internal_complex,
     )
 
-    Z_tot = parallel_sum(
-        Z_bottom,
-        series_sum(Z_top, parallel_sum(Z_out, Z_res)),
+    total_impedance = parallel_sum(
+        bottom_impedance,
+        series_sum(top_impedance, parallel_sum(outer_impedance, resonator_impedance)),
     )
 
-    return Z_C, Z_res, Z_top, Z_bottom, Z_out, Z_tot
+    components = (
+        capacitor_impedance,
+        resonator_impedance,
+        top_impedance,
+        bottom_impedance,
+        outer_impedance,
+        total_impedance,
+    )
+    return tuple(np.asarray(component, dtype=np.complex128) for component in components)  # type: ignore[return-value]
 
 
-def output_power(
-    V: np.ndarray,
-    R_int: np.ndarray,
+def output_power(  # noqa: PLR0913
+    voltage: RealArray,
+    internal_resistance: RealArray,
+    *,
     ratio: float,
     R: float,
     L: float,
@@ -128,31 +159,45 @@ def output_power(
     R_FG: float,
     L_FG: float,
     N: int,
-    L_int_t: float = 0.0,
-    L_int_b: float = 0.0,
-) -> np.ndarray:
-    """Calculate the output power based on model parameters and input data."""
-    Z_C, Z_res, Z_top, Z_bottom, Z_out, Z_tot = mesa_impedance(
-        V,
-        R_int,
-        R,
-        L,
-        C,
-        C_intt,
-        C_intb,
-        R_loss_t,
-        R_loss_b,
-        R_ext,
-        L_ext,
-        R_gnd,
-        R_mid,
-        R_FG,
-        L_FG,
-        N,
-        L_int_t,
-        L_int_b,
+    L_int_t: float,
+    L_int_b: float,
+) -> RealArray:
+    (
+        _capacitor_impedance,
+        resonator_impedance,
+        top_impedance,
+        _bottom_impedance,
+        outer_impedance,
+        total_impedance,
+    ) = mesa_impedance(
+        voltage,
+        internal_resistance,
+        R=R,
+        L=L,
+        C=C,
+        C_intt=C_intt,
+        C_intb=C_intb,
+        R_loss_t=R_loss_t,
+        R_loss_b=R_loss_b,
+        R_ext=R_ext,
+        L_ext=L_ext,
+        R_gnd=R_gnd,
+        R_mid=R_mid,
+        R_FG=R_FG,
+        L_FG=L_FG,
+        N=N,
+        L_int_t=L_int_t,
+        L_int_b=L_int_b,
     )
-    I_ext = Z_tot * Ic / series_sum(Z_top, parallel_sum(Z_out, Z_res))
-    I_res = parallel_sum(Z_out, Z_res) * I_ext / Z_res
-    power = R * np.abs(I_res) ** 2 / 2
-    return ratio * power
+
+    injection_current = total_impedance * Ic / series_sum(
+        top_impedance,
+        parallel_sum(outer_impedance, resonator_impedance),
+    )
+    resonator_current = (
+        parallel_sum(outer_impedance, resonator_impedance)
+        * injection_current
+        / resonator_impedance
+    )
+    power = R * np.abs(resonator_current) ** 2 / 2.0
+    return ratio * np.asarray(power, dtype=np.float64)

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# coding: utf-8
 
 
 from __future__ import annotations
@@ -7,12 +6,12 @@ from __future__ import annotations
 import argparse
 import logging
 from pathlib import Path
-from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
+from pandas.errors import ParserError
 
 # Configure logging
 logging.basicConfig(
@@ -49,18 +48,19 @@ def load_data(file_path: str) -> pd.DataFrame:
     """
     try:
         df = pd.read_csv(file_path, sep=r"\s+")  # type: ignore[call-overload]
-        logging.info("Data loaded successfully from %s.", file_path)
-        logging.debug("DataFrame columns: %s", df.columns.tolist())
-        return df
     except FileNotFoundError:
-        logging.error("File not found: %s", file_path)
+        logging.exception("File not found: %s", file_path)
         raise
-    except pd.errors.ParserError as e:
-        logging.error("Error parsing file %s: %s", file_path, e)
+    except ParserError:
+        logging.exception("Error parsing file %s", file_path)
         raise
-    except Exception as e:
-        logging.error("Unexpected error loading data from %s: %s", file_path, e)
+    except Exception:
+        logging.exception("Unexpected error loading data from %s", file_path)
         raise
+    else:
+        logging.info("Data loaded successfully from %s.", file_path)
+        logging.debug("DataFrame columns: %s", list(df.columns))
+        return df
 
 
 def process_data(df: pd.DataFrame, resample_interval: str = "100us") -> pd.DataFrame:
@@ -82,7 +82,7 @@ def process_data(df: pd.DataFrame, resample_interval: str = "100us") -> pd.DataF
     ]
     if missing_columns:
         logging.error("Missing columns in data: %s", missing_columns)
-        raise KeyError(f"Missing columns: {missing_columns}")
+        raise KeyError(tuple(missing_columns))
 
     # Compute differences in phases
     df_processed["dphase1"] = df_processed["V(nphase1)"].diff()
@@ -99,8 +99,8 @@ def process_data(df: pd.DataFrame, resample_interval: str = "100us") -> pd.DataF
     try:
         df_processed["time"] = pd.to_datetime(df_processed["time"], unit="s")
         logging.info("Converted 'time' column to datetime.")
-    except (ValueError, TypeError) as e:
-        logging.error("Error converting 'time' to datetime: %s", e)
+    except (ValueError, TypeError):
+        logging.exception("Error converting 'time' to datetime")
         raise
 
     # Set 'time' as index
@@ -111,8 +111,8 @@ def process_data(df: pd.DataFrame, resample_interval: str = "100us") -> pd.DataF
     try:
         df_resampled = df_processed.resample(resample_interval).mean()
         logging.info("Resampled data every %s and took mean.", resample_interval)
-    except (ValueError, TypeError, KeyError) as e:
-        logging.error("Error during resampling: %s", e)
+    except (ValueError, TypeError, KeyError):
+        logging.exception("Error during resampling")
         raise
 
     # Reset index
@@ -129,8 +129,8 @@ def process_data(df: pd.DataFrame, resample_interval: str = "100us") -> pd.DataF
 
 def plot_data(
     df_resampled: pd.DataFrame,
-    plot_path: Optional[str] = None,
-    xlim: Optional[tuple[float, float]] = None,
+    plot_path: str | None = None,
+    xlim: tuple[float, float] | None = None,
     radius: float = R_RAD,
 ) -> Figure:
     """Plot Delta Phase and Power over Time using twin y-axes.
@@ -150,7 +150,7 @@ def plot_data(
     ]
     if missing_columns:
         logging.error("Missing columns for plotting: %s", missing_columns)
-        raise KeyError(f"Missing columns: {missing_columns}")
+        raise KeyError(tuple(missing_columns))
 
     # Configure plotting parameters
     plt.rcParams["font.family"] = FONT_FAMILY
@@ -166,8 +166,12 @@ def plot_data(
     start_time = df_resampled["time"].iloc[0]
     delta_time = (
         df_resampled["time"] - start_time
-    ).dt.total_seconds()  # Convert to microseconds
-    delta_phi = (df_resampled["V(nphase2)"] - df_resampled["V(nphase1)"]) % (2 * np.pi)
+    ).dt.total_seconds().to_numpy()
+    phase_difference = (
+        df_resampled["V(nphase2)"].to_numpy()
+        - df_resampled["V(nphase1)"].to_numpy()
+    )
+    delta_phi = np.mod(phase_difference, 2 * np.pi)
     ln1 = ax1.plot(
         delta_time, delta_phi, color="blue", label=r"$\Delta\varphi$", linewidth=1
     )
@@ -180,7 +184,7 @@ def plot_data(
 
     # Create a second y-axis for Power
     ax2 = ax1.twinx()
-    power = df_resampled["power"] * radius * 1e6  # Scale power
+    power = df_resampled["power"].to_numpy() * radius * 1e6
     ln2 = ax2.plot(
         delta_time, power, color="orange", label=r"$P_{\rm rad}$", linewidth=1
     )
@@ -205,8 +209,8 @@ def plot_data(
         try:
             fig.savefig(plot_path)
             logging.info("Plot saved to %s.", plot_path)
-        except OSError as e:
-            logging.error("Error saving plot to %s: %s", plot_path, e)
+        except OSError:
+            logging.exception("Error saving plot to %s", plot_path)
 
     # Show plot
     plt.show()
@@ -223,8 +227,8 @@ def save_data(df: pd.DataFrame, file_path: str) -> None:
     try:
         df.to_csv(file_path, sep="\t", index=True)
         logging.info("Processed data saved to %s.", file_path)
-    except OSError as e:
-        logging.error("Error saving data to %s: %s", file_path, e)
+    except OSError:
+        logging.exception("Error saving data to %s", file_path)
         raise
 
 

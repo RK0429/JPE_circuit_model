@@ -1,130 +1,187 @@
-#!/usr/bin/env python
-# coding: utf-8
+"""Command-line entry point for the internal resistance fitting workflow."""
 
-"""CLI entry point for R_int fitting analysis."""
+from __future__ import annotations
 
 import argparse
 import logging
-from argparse import Namespace
-from typing import Any, cast
+from argparse import ArgumentParser, Namespace
+from collections.abc import Sequence
 
 import lmfit as lf
 import numpy as np
+from lmfit.model import ModelResult
+from numpy.typing import NDArray
 
-from fitting.R_int.fitting import perform_fitting
-from fitting.R_int.io import load_data, save_processed_data
-from fitting.R_int.model import P2T, T2R_th
-from fitting.R_int.plot import (
+from .fitting import perform_fitting
+from .io import load_data, save_processed_data
+from .model import (
+    temperature_from_power,
+    thermal_resistance_from_temperature,
+)
+from .plot import (
     plot_current_temperature,
     plot_current_thermal_resistance,
     plot_thermal_resistance,
     plot_voltage_current,
 )
-from fitting.R_int.processing import process_data
-from fitting.R_int.solvers import I_int2V_int
+from .processing import process_data
+from .solvers import current_to_internal_voltage
+
+FloatArray = NDArray[np.float64]
 
 
-def parse_args() -> Namespace:
-    parser = argparse.ArgumentParser(description="R_int fitting analysis")
-    parser.add_argument("input_file", help="Path to input data file")
+def build_parser() -> ArgumentParser:
+    parser = argparse.ArgumentParser(description="Internal resistance fitting")
+    parser.add_argument("input_file", help="Path to the raw data file")
     parser.add_argument(
         "--output-data",
         "-o",
         default="processed_data.dat",
-        help="Path to save processed data",
+        help="Destination path for the processed dataset",
     )
     parser.add_argument(
-        "--output-plot", "-p", default="fit_plots.pdf", help="Path to save primary plot"
+        "--output-plot",
+        "-p",
+        default="fit_plots.pdf",
+        help="Destination path for the generated plots",
     )
-    return parser.parse_args()
+    return parser
 
 
-def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-    )
-    args = parse_args()
+def parse_args(argv: Sequence[str] | None = None) -> Namespace:
+    return build_parser().parse_args(argv)
 
-    # Load and process data
-    df = load_data(args.input_file)
-    df_proc = process_data(df)
-    save_processed_data(df_proc, args.output_data)
 
-    # Prepare data arrays
-    I_int = df_proc["Current"].to_numpy() * 1e-3
-    V_int = df_proc["Reduced Voltage"].to_numpy()
-
-    # Define the model
-    model = lf.Model(
-        I_int2V_int,
-        independent_vars=["I_ints"],
-        param_names=["A", "B", "C", "D", "alpha", "beta", "gamma", "T_bath"],
-    )
-
-    initial = {
-        "A": 140.26315944091203,
-        "B": 74.42877017162486,
-        "C": 2993.7109475835937,
-        "D": 14.966433685735403,
+def _initial_parameters() -> dict[str, float]:
+    return {
+        "coeff_a": 140.26315944091203,
+        "coeff_b": 74.42877017162486,
+        "coeff_c": 2993.7109475835937,
+        "coeff_d": 14.966433685735403,
         "alpha": 0.0,
         "beta": 0.07007291353077101,
         "gamma": 7162.304320037531,
-        "T_bath": -26.29469185418874,
+        "bath_temperature": -26.29469185418874,
     }
-    bounds = {
-        "A": (0.0, None),
-        "B": (0.0, 500.0),
-        "C": (0.0, 10000.0),
-        "D": (0.0, None),
+
+
+def _parameter_bounds() -> dict[str, tuple[float | None, float | None]]:
+    return {
+        "coeff_a": (0.0, None),
+        "coeff_b": (0.0, 500.0),
+        "coeff_c": (0.0, 10_000.0),
+        "coeff_d": (0.0, None),
         "alpha": (0.0, 1.2),
         "beta": (0.005, 0.1),
         "gamma": (0.0, 8000.0),
-        "T_bath": (-50.0, 40.0),
+        "bath_temperature": (-50.0, 40.0),
     }
-    vary = {
-        "A": True,
-        "B": True,
-        "C": True,
-        "D": True,
+
+
+def _parameter_activity() -> dict[str, bool]:
+    return {
+        "coeff_a": True,
+        "coeff_b": True,
+        "coeff_c": True,
+        "coeff_d": True,
         "alpha": False,
         "beta": False,
         "gamma": True,
-        "T_bath": True,
+        "bath_temperature": True,
     }
 
-    # Create parameters
-    params = model.make_params()
-    for name in model.param_names:
-        p = params[name]
-        minb, maxb = bounds[name]
-        p.set(value=initial[name], min=minb, max=maxb, vary=vary[name])
 
-    # Perform fitting
-    result = perform_fitting(model, params, I_int, V_int)
-
-    # Plot results
-    plot_thermal_resistance(result, output=args.output_plot)
-
-    V_cal = I_int2V_int(I_int, **result.best_values)
-    plot_voltage_current(I_int, V_int, V_cal, output=args.output_plot)
-
-    P_cal = V_cal * I_int
-    T_cal = cast(
-        np.ndarray[Any, Any],
-        P2T(P_cal, result.best_values["gamma"], result.best_values["T_bath"]),
+def _configure_model() -> tuple[lf.Model, lf.Parameters]:
+    model = lf.Model(
+        current_to_internal_voltage,
+        independent_vars=["currents"],
+        param_names=[
+            "coeff_a",
+            "coeff_b",
+            "coeff_c",
+            "coeff_d",
+            "alpha",
+            "beta",
+            "gamma",
+            "bath_temperature",
+        ],
     )
-    plot_current_temperature(I_int, T_cal, output=args.output_plot)
+    params = model.make_params()
 
-    R_th_cal = cast(
-        np.ndarray[Any, Any],
-        T2R_th(
-            T_cal,
+    initial = _initial_parameters()
+    bounds = _parameter_bounds()
+    vary = _parameter_activity()
+
+    for name in model.param_names:
+        parameter = params[name]
+        lower, upper = bounds[name]
+        parameter.set(
+            value=initial[name],
+            min=lower,
+            max=upper,
+            vary=vary[name],
+        )
+
+    return model, params
+
+
+def _compute_calculated_values(
+    currents: FloatArray,
+    result: ModelResult,
+) -> tuple[FloatArray, FloatArray, FloatArray]:
+    voltages = np.asarray(
+        current_to_internal_voltage(currents, **result.best_values),
+        dtype=np.float64,
+    )
+    power = voltages * currents
+    temperatures = np.asarray(
+        temperature_from_power(
+            power,
+            result.best_values["gamma"],
+            result.best_values["bath_temperature"],
+        ),
+        dtype=np.float64,
+    )
+    thermal_resistance = np.asarray(
+        thermal_resistance_from_temperature(
+            temperatures,
             result.best_values["alpha"],
             result.best_values["beta"],
             result.best_values["gamma"],
         ),
+        dtype=np.float64,
     )
-    plot_current_thermal_resistance(I_int, R_th_cal, result, output=args.output_plot)
+    return voltages, temperatures, thermal_resistance
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    args = parse_args(argv)
+
+    dataframe = load_data(args.input_file)
+    processed = process_data(dataframe)
+    save_processed_data(processed, args.output_data)
+
+    currents = processed["Current"].to_numpy() * 1e-3
+    voltages = processed["Reduced Voltage"].to_numpy()
+
+    model, params = _configure_model()
+    result = perform_fitting(model, params, currents, voltages)
+
+    plot_thermal_resistance(result, output=args.output_plot)
+
+    calc_voltages, temperatures, thermal_resistance = _compute_calculated_values(
+        currents, result
+    )
+    plot_voltage_current(currents, voltages, calc_voltages, output=args.output_plot)
+
+    plot_current_temperature(currents, temperatures, output=args.output_plot)
+    plot_current_thermal_resistance(
+        currents,
+        thermal_resistance,
+        result,
+        output=args.output_plot,
+    )
 
 
 if __name__ == "__main__":

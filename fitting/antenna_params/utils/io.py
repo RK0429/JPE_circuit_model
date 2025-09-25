@@ -1,45 +1,28 @@
-#!/usr/bin/env python
-# coding: utf-8
+"""I/O helpers for antenna parameter fitting workflows."""
+
+from __future__ import annotations
 
 import logging
-from typing import Tuple
+from pathlib import Path
 
 import pandas as pd
 
+LOGGER = logging.getLogger(__name__)
+
 
 def load_data(
-    bo_file_path: str,
-    ive_file_path: str,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Load experimental data from specified file paths.
-
-    Parameters:     bo_file_path (str): Path to the Bolometer Output data file.
-    ive_file_path (str): Path to the IVE data file.
-
-    Returns:     Tuple[pd.DataFrame, pd.DataFrame]: DataFrames containing Bolometer
-    Output and IVE data.
-    """
-    try:
-        bolometer_df = pd.read_table(bo_file_path)
-        ive_df = pd.read_table(ive_file_path)
-        logging.info("Experimental data loaded successfully.")
-        return bolometer_df, ive_df
-    except Exception as e:
-        logging.error(f"Error loading experimental data: {e}")
-        raise
+    bolometer_path: str,
+    ive_path: str,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Read the bolometer output and IV characteristic tables."""
+    bolometer_df = pd.read_csv(Path(bolometer_path), sep="\t")
+    ive_df = pd.read_csv(Path(ive_path), sep="\t")
+    LOGGER.info("Experimental data loaded successfully")
+    return bolometer_df, ive_df
 
 
 def load_txt_data(filename: str) -> pd.DataFrame:
-    """Load data from a text file with whitespace delimiter.
-
-    Parameters:     filename (str): Path to the text file.
-
-    Returns:     pd.DataFrame: DataFrame containing the loaded data.
-    """
-    try:
-        df = pd.read_csv(filename, delim_whitespace=True)
-        logging.info(f"Text data loaded successfully from {filename}.")
-        return df
-    except Exception as e:
-        logging.error(f"Error loading text data: {e}")
-        raise
+    """Read a whitespace-delimited text file into a dataframe."""
+    dataframe = pd.read_csv(Path(filename), delim_whitespace=True)
+    LOGGER.info("Text data loaded successfully from %s", filename)
+    return dataframe

@@ -1,40 +1,44 @@
-#!/usr/bin/env python
-# coding: utf-8
+"""Helper utilities to configure and run lmfit-based antenna parameter fitting."""
+
+from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
-import lmfit as lf  # type: ignore
+import lmfit as lf
 import numpy as np
-from lmfit.model import ModelResult  # type: ignore
+from lmfit.model import ModelResult
+from numpy.typing import NDArray
+
+LOGGER = logging.getLogger(__name__)
+
+FloatArray = NDArray[np.float64]
 
 
-def setup_fitting_model(output_power_fn) -> lf.Model:
-    """Set up the RLC series model for output power fitting.
-
-    Returns:     lf.Model: The lmfit Model for output_power.
-    """
-    return lf.Model(output_power_fn, independent_vars=["V", "R_int"])
+def setup_fitting_model(output_power_fn: Callable[..., FloatArray]) -> lf.Model:
+    """Build an ``lmfit`` model that wraps ``output_power_fn``."""
+    return lf.Model(
+        output_power_fn,
+        independent_vars=["voltage", "internal_resistance"],
+    )
 
 
 def perform_fitting(
     model: lf.Model,
     params: lf.Parameters,
-    V: np.ndarray,
-    R_int: np.ndarray,
-    data: np.ndarray,
-    weights: np.ndarray,
+    voltage: FloatArray,
+    internal_resistance: FloatArray,
+    measured_power: FloatArray,
+    weights: FloatArray,
 ) -> ModelResult:
-    """Perform the fitting using the provided model, parameters, and data.
-
-    Parameters:     model (lf.Model): The lmfit model.     params (lf.Parameters): The
-    model parameters.     V (np.ndarray): Voltage array.     R_int (np.ndarray):
-    Internal resistance array.     data (np.ndarray): Dependent variable data to fit.
-    weights (np.ndarray): Weights for the fitting.
-
-    Returns:     ModelResult: The result of the fitting process.
-    """
-    result = model.fit(data, params, V=V, R_int=R_int, weights=weights)
-    logging.info("Fitting completed.")
-    logging.info(result.fit_report())
-    logging.info("Best fit values: %s", result.best_values)
+    """Fit ``model`` to the experimental ``measured_power``."""
+    result = model.fit(
+        measured_power,
+        params,
+        voltage=voltage,
+        internal_resistance=internal_resistance,
+        weights=weights,
+    )
+    LOGGER.info("Fitting completed")
+    LOGGER.info("Best fit values: %s", result.best_values)
     return result

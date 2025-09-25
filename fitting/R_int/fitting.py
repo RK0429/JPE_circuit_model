@@ -1,44 +1,52 @@
-#!/usr/bin/env python
-# coding: utf-8
+"""Utilities for fitting the internal resistance model with lmfit."""
+
+from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
-import lmfit as lf  # type: ignore
+import lmfit as lf
 import numpy as np
-from lmfit.model import ModelResult  # type: ignore
+from lmfit.model import ModelResult
+from numpy.typing import NDArray
+
+CURRENT_LOGGER = logging.getLogger(__name__)
+
+FloatArray = NDArray[np.float64]
 
 
 def fit_callback(
-    params: Dict[str, Any], iter: int, resid: np.ndarray, *args, **kwargs
+    params: dict[str, Any],
+    iteration: int,
+    residuals: FloatArray,
+    *args: Any,
+    **kwargs: Any,
 ) -> bool:
-    """Callback for fitting iterations to log chi-square value."""
-    chi_sq = np.sum(resid**2)
-    logging.info("Iteration %d: chi-square = %f", iter, chi_sq)
+    """Log the chi-square value at each fitting iteration."""
+    _ = (params, args, kwargs)
+    chi_sq = float(np.sum(residuals**2))
+    CURRENT_LOGGER.info("Iteration %d: chi-square = %.6f", iteration, chi_sq)
     return False
 
 
 def perform_fitting(
-    model: lf.Model, params: lf.Parameters, I_int: np.ndarray, V_int: np.ndarray
+    model: lf.Model,
+    params: lf.Parameters,
+    current_internal: FloatArray,
+    voltage_internal: FloatArray,
 ) -> ModelResult:
-    """Perform the fitting using lmfit.
+    """Fit the lmfit ``model`` to the provided current/voltage data."""
+    valid_mask = ~np.isnan(voltage_internal) & ~np.isnan(current_internal)
+    valid_currents = current_internal[valid_mask]
+    valid_voltages = voltage_internal[valid_mask]
 
-    Parameters:     model (lf.Model): The lmfit model.     params (lf.Parameters): The
-    model parameters.     I_int (np.ndarray): Current array.     V_int (np.ndarray):
-    Voltage array.
-
-    Returns:     ModelResult: The result of the fitting process.
-    """
-    valid = ~np.isnan(V_int) & ~np.isnan(I_int)
-    I_valid = I_int[valid]
-    V_valid = V_int[valid]
     result = model.fit(
-        V_valid,
+        valid_voltages,
         params,
-        I_ints=I_valid,
-        weights=V_valid**2,
+        currents=valid_currents,
+        weights=valid_voltages**2,
         iter_cb=fit_callback,
         max_nfev=100,
     )
-    logging.info("Fitting completed.")
+    CURRENT_LOGGER.info("Fitting completed")
     return result

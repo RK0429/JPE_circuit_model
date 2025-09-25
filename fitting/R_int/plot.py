@@ -1,89 +1,100 @@
-#!/usr/bin/env python
-# coding: utf-8
+"""Plotting helpers for the internal resistance fitting workflow."""
+
+from __future__ import annotations
 
 import logging
-from typing import Optional
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from lmfit.model import ModelResult
+from numpy.typing import NDArray
 
-from fitting.R_int.model import T2R_th
+from .model import thermal_resistance_from_temperature
+
+LOGGER = logging.getLogger(__name__)
+
+FloatArray = NDArray[np.float64]
 
 
-def plot_thermal_resistance(result, output: Optional[str] = None):
-    """Plot Thermal Resistance vs Temperature from fitting result."""
-    T = np.linspace(-50, 100, 100)
-    R_th = T2R_th(
-        T,
+def _save_figure(output: str | None, suffix: str = "") -> None:
+    if output is None:
+        plt.show()
+        return
+
+    path = Path(output)
+    if suffix:
+        path = path.with_name(f"{path.stem}_{suffix}{path.suffix}")
+    plt.savefig(path)
+    LOGGER.info("Plot saved to %s", path)
+    plt.show()
+
+
+def plot_thermal_resistance(result: ModelResult, output: str | None = None) -> None:
+    """Plot thermal resistance as a function of temperature."""
+    temperatures = np.linspace(-50.0, 100.0, 100)
+    resistances = thermal_resistance_from_temperature(
+        temperatures,
         result.best_values["alpha"],
         result.best_values["beta"],
         result.best_values["gamma"],
     )
 
     plt.figure(figsize=(8, 6))
-    plt.plot(T, R_th, label="Thermal Resistance Model")
+    plt.plot(temperatures, resistances, label="Thermal resistance model")
     plt.grid(True, linestyle="--", linewidth=0.5)
     plt.ylabel("Thermal Resistance [K/W]")
     plt.xlabel("Temperature [K]")
     plt.legend()
     plt.tight_layout()
-    if output:
-        plt.savefig(output)
-        logging.info(f"Thermal resistance plot saved to {output}.")
-    plt.show()
+    _save_figure(output)
 
 
 def plot_voltage_current(
-    I_int: np.ndarray,
-    V_int_exp: np.ndarray,
-    V_int_calc: np.ndarray,
-    output: Optional[str] = None,
-):
-    """Plot Experimental and Calculated Voltage vs Current."""
+    current_values: FloatArray,
+    measured_voltage: FloatArray,
+    model_voltage: FloatArray,
+    output: str | None = None,
+) -> None:
+    """Plot the measured and modelled voltage against current."""
     plt.figure(figsize=(8, 6))
-    plt.scatter(I_int * 1e3, V_int_exp, label="Experimental", s=5)
-    plt.scatter(I_int * 1e3, V_int_calc, label="Calculated", s=5)
+    plt.scatter(current_values * 1e3, measured_voltage, label="Measured", s=5)
+    plt.scatter(current_values * 1e3, model_voltage, label="Model", s=5)
     plt.grid(True, linestyle="--", linewidth=0.5)
     plt.ylabel("Voltage [V]")
     plt.xlabel("Current [mA]")
     plt.legend()
     plt.tight_layout()
-    if output:
-        plt.savefig(output)
-        logging.info(f"Voltage vs current plot saved to {output}.")
-    plt.show()
+    _save_figure(output)
 
 
 def plot_current_temperature(
-    I_int: np.ndarray, T_cal: np.ndarray, output: Optional[str] = None
-):
-    """Plot Temperature vs Current."""
+    current_values: FloatArray,
+    temperature_values: FloatArray,
+    output: str | None = None,
+) -> None:
+    """Plot the calculated temperature versus current."""
     plt.figure(figsize=(8, 6))
-    plt.scatter(I_int, T_cal, s=5)
+    plt.scatter(current_values, temperature_values, s=5)
     plt.grid(True, linestyle="--", linewidth=0.5)
     plt.ylabel("Temperature [K]")
     plt.xlabel("Current [A]")
     plt.tight_layout()
-    if output:
-        out = output.replace(".pdf", "_Temperature_vs_Current.pdf")
-        plt.savefig(out)
-        logging.info(f"Temperature vs current plot saved to {out}.")
-    plt.show()
+    _save_figure(output, suffix="Temperature_vs_Current")
 
 
 def plot_current_thermal_resistance(
-    I_int: np.ndarray, R_th_cal: np.ndarray, result, output: Optional[str] = None
-):
-    """Plot Thermal Resistance vs Current."""
+    current_values: FloatArray,
+    thermal_resistance_values: FloatArray,
+    result: ModelResult,
+    output: str | None = None,
+) -> None:
+    """Plot the thermal resistance versus current."""
     plt.figure(figsize=(8, 6))
-    plt.scatter(I_int, R_th_cal, s=5)
+    plt.scatter(current_values, thermal_resistance_values, s=5)
     plt.grid(True, linestyle="--", linewidth=0.5)
     plt.ylabel("Thermal Resistance [K/W]")
     plt.xlabel("Current [A]")
-    plt.ylim(0, result.best_values["gamma"] * 10)
+    plt.ylim(0.0, result.best_values["gamma"] * 10.0)
     plt.tight_layout()
-    if output:
-        out = output.replace(".pdf", "_Thermal_Resistance_vs_Current.pdf")
-        plt.savefig(out)
-        logging.info(f"Thermal resistance vs current plot saved to {out}.")
-    plt.show()
+    _save_figure(output, suffix="Thermal_Resistance_vs_Current")
