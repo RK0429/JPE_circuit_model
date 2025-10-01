@@ -178,3 +178,4 @@ raw_data/
 
 .DS_Store
 data/raw/
+*.raw
