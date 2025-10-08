@@ -47,7 +47,8 @@ def load_data(file_path: str) -> pd.DataFrame:
     pd.errors.ParserError: If there's an error parsing the file.
     """
     try:
-        df = pd.read_csv(file_path, sep=r"\s+")  # type: ignore[call-overload]
+        path = Path(file_path)
+        df = pd.read_csv(path, sep=r"\s+")
     except FileNotFoundError:
         logging.exception("File not found: %s", file_path)
         raise
@@ -58,7 +59,7 @@ def load_data(file_path: str) -> pd.DataFrame:
         logging.exception("Unexpected error loading data from %s", file_path)
         raise
     else:
-        logging.info("Data loaded successfully from %s.", file_path)
+        logging.info("Data loaded successfully from %s.", path)
         logging.debug("DataFrame columns: %s", list(df.columns))
         return df
 

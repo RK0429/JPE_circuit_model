@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
-"""Script to modify JPE_3stacks.asc by adjusting the number of 1stack components and
-their parameters."""
+"""Script to modify JPE_3stacks.asc by adjusting components and parameters."""
+
+from __future__ import annotations
+
 import argparse
 import logging
+from argparse import Namespace
+from collections.abc import Sequence
 
 from python_integration.utils import SimulationConfig, modify_stacks, parse_params
 
 
-def main():
+def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Modify JPE_3stacks.asc file")
     parser.add_argument("input", help="Path to input JPE_3stacks.asc")
     parser.add_argument(
@@ -23,16 +27,16 @@ def main():
         "-p",
         "--params",
         nargs="*",
-        default=[],
+        default=None,
         help="Per-stack parameters, e.g. L=175n,R=8.29,C=100n",
     )
     parser.add_argument(
         "--simulate", action="store_true", help="Run simulation after modification"
     )
     parser.add_argument("--sim-output", help="Simulation output folder")
-    args = parser.parse_args()
+    args: Namespace = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO)
-    params_list = parse_params(args.params)
+    params_list = parse_params(args.params or [])
     modify_stacks(
         args.input,
         args.output,

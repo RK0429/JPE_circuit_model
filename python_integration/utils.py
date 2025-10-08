@@ -126,7 +126,7 @@ def _run_simulation(
         LOGGER.info("Simulation completed. Raw: %s, Log: %s", raw_path, log_path)
         return raw_path.as_posix(), log_path.as_posix()
 
-    runner.run(editor_output)  # type: ignore[reportUnknownMemberType]
+    runner.run(editor_output)
     runner.wait_completion()
     LOGGER.info("Simulation completed with asynchronous runner")
     return None

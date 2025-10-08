@@ -97,9 +97,11 @@ def main() -> None:
     simulation_file = _resolve_simulation_file(output_asc)
 
     runner = SimRunner(
-        simulator=LTspice, output_folder=args.output_folder, verbose=True
+        simulator=LTspice,
+        output_folder=args.output_folder,
+        verbose=True,
     )
-    runner.run(simulation_file)  # type: ignore[reportUnknownMemberType]
+    runner.run(simulation_file)
     runner.wait_completion()
     logging.info("Simulation completed. Results in folder %s", args.output_folder)
 
