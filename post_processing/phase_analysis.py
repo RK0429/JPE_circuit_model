@@ -165,12 +165,9 @@ def plot_data(
 
     # Plot Delta Phase on ax1
     start_time = df_resampled["time"].iloc[0]
-    delta_time = (
-        df_resampled["time"] - start_time
-    ).dt.total_seconds().to_numpy()
+    delta_time = (df_resampled["time"] - start_time).dt.total_seconds().to_numpy()
     phase_difference = (
-        df_resampled["V(nphase2)"].to_numpy()
-        - df_resampled["V(nphase1)"].to_numpy()
+        df_resampled["V(nphase2)"].to_numpy() - df_resampled["V(nphase1)"].to_numpy()
     )
     delta_phi = np.mod(phase_difference, 2 * np.pi)
     ln1 = ax1.plot(
@@ -187,10 +184,10 @@ def plot_data(
     ax2 = ax1.twinx()
     power = df_resampled["power"].to_numpy() * radius * 1e6
     ln2 = ax2.plot(
-        delta_time, power, color="orange", label=r"$P_{\rm rad}$", linewidth=1
+        delta_time, power, color="orange", label=r"$P_{\mathrm rad}$", linewidth=1
     )
 
-    ax2.set_ylabel(r"$P_{\rm rad}$ [$\mu$W]")
+    ax2.set_ylabel(r"$P_{\mathrm rad}$ [$\mu$W]")
     ax2.grid(False)  # Remove grid for second axis
 
     # Combine legends from both axes
