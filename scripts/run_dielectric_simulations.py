@@ -35,13 +35,17 @@ import pandas as pd
 SCRIPT_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_ROOT.parent
 DEFAULT_SAVE_VARS = (
-    "V(Ndc)",
     "V(Nd)",
     "V(Nc)",
     "V(Nb)",
     "V(Na)",
     "V(T)",
-    "I(V)",
+    "I(R_rad)",
+    "I(R_gnd)",
+)
+
+DEFAULT_OPTIONS_LINE = (
+    ".options reltol=2e-2 abstol=1e-8 chgtol=1e-12 trtol=7 method=gear maxord=2 gmin=1e-9"
 )
 
 
@@ -162,12 +166,16 @@ def insert_save_directive(
         raise RuntimeError(f"{original} does not contain a .tran directive")
 
     save_line = ".save " + " ".join(save_vars) + "\n"
+    options_line = DEFAULT_OPTIONS_LINE + "\n"
 
     if ".save" in content:
         content = content.replace(".save", save_line + ".save", 1)
     else:
         prefix, suffix = content.split(marker, 1)
-        content = prefix + save_line + marker + suffix
+        content = prefix + save_line + options_line + marker + suffix
+
+    if DEFAULT_OPTIONS_LINE not in content:
+        content = content.replace(save_line, save_line + options_line, 1)
 
     destination.write_text(content, encoding="utf-8")
 
