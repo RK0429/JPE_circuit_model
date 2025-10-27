@@ -1,0 +1,43 @@
+* Z:\Users\r-kobayashi\Documents\DoctoralResearch\DoctoralResearch\src\JPE_circuit_model\examples\JPE_10stacks.asc
+V Ndc 0 PWL(0 0 1 3 2 0)
+R_fg N008 Ndc 50
+L_ext N006 N008 10m
+R_ext N004 N006 1.15
+L_mid N002 N004 10m
+L_rad N005 N007 6.22µ
+R_rad N10 N005 8.537
+C_rad N007 N0 10.8n
+R_gnd N0 0 7.2
+V§T_bath N001 0 -26.295
+R_th T N001 7162.3
+C_th T N001 100n
+R_mid N10 N002 8.29
+XX4 N6 N5 T 0 1stack params: M=217/26.5 N=106 I_c=18.05m R=180.3m L=332.5n C=978n
+XX7 N9 N8 T 0 1stack params: M=217/14 N=57 I_c=18m R=97.7m L=180.0n C=1.806u
+XX10 N10 N9 T 0 1stack params: M=217/15 N=40 I_c=12m R=94.94m L=175.0n C=1.858u
+XX8 N8 N7 T 0 1stack params: M=217/14 N=57 I_c=18m R=97.7m L=180.0n C=1.806u
+XX9 N7 N6 T 0 1stack params: M=217/14 N=57 I_c=18m R=97.7m L=180.0n C=1.806u
+XX1 N5 N4 T 0 1stack params: M=217/26.5 N=106 I_c=18.05m R=180.3m L=332.5n C=978n
+XX2 N4 N3 T 0 1stack params: M=217/26.5 N=106 I_c=18.05m R=180.3m L=332.5n C=978n
+XX3 N3 N2 T 0 1stack params: M=217/26.5 N=106 I_c=18.05m R=180.3m L=332.5n C=978n
+XX5 N2 N1 T 0 1stack params: M=217/26.5 N=106 I_c=18.05m R=180.3m L=332.5n C=978n
+XX6 N1 N0 T 0 1stack params: M=217/26.5 N=106 I_c=18.05m R=180.3m L=332.5n C=978n
+
+* block symbol definitions
+.subckt 1stack in out P_out P_in
+B§IJJ in out I={I_c}*sin(V(Phi))
+B§R_int in out I={M}*((V(in)-V(out))/({alpha}*(exp(-1*(V(P_out)-V(P_in))/{beta})+exp(-1*(V(P_out)-V(P_in))**2/{gamma}))+{delta}))
+R in N001 {R}
+C Nlc out {C}
+B§P P_in P_out I=abs(V(in)-V(out))*I(R_int)
+B§V_t 0 Phi I=(V(in)-V(out))/{N}
+C§h/2e Phi 0 329.1p
+L N001 Nlc {L}
+.ic V(Phi)=0 V(Nlc)=0
+.ends 1stack
+
+.param alpha=140.26 beta=74.429 gamma=2993.7 delta=14.966
+.tran 0 2 0 10u
+.ic V(Na)=0 V(Nb)=0 V(Nc)=0 V(Nd)=0
+.backanno
+.end

@@ -1,0 +1,36 @@
+* Z:\Users\r-kobayashi\Documents\DoctoralResearch\DoctoralResearch\src\JPE_circuit_model\examples\JPE_3stacks.asc
+V Ndc 0 PWL(0 0 1 3 2 0)
+R_fg N006 Ndc 50
+L_ext N004 N006 10m
+R_ext N002 N004 1.15
+L_mid N001 N002 10m
+L_rad N003 N005 6.22µ
+R_rad Nd N003 8.537
+C_rad N005 Na 10.8n
+R_gnd Na 0 7.2
+V§T_bath N007 0 -26.295
+R_th T N007 7162.3
+C_th T N007 100n
+R_mid Nd N001 8.29
+XX4 Nd Nc 0 T 1stack params: M=217/15 N=40 I_c=12m R=94.94m L=175.0n C=1.858u
+XX5 Nc Nb 0 T 1stack params: M=217/43 N=172 I_c=18m R=293m L=540.1n C=602.1n
+XX6 Nb Na 0 T 1stack params: M=217/159 N=636 I_c=18.05m R=1.082 L=1.995u C=163.0n
+
+* block symbol definitions
+.subckt 1stack in out P_out P_in
+B§IJJ in out I={I_c}*sin(V(Phi))
+B§R_int in out I={M}*((V(in)-V(out))/({alpha}*(exp(-1*(V(P_out)-V(P_in))/{beta})+exp(-1*(V(P_out)-V(P_in))**2/{gamma}))+{delta}))
+R in N001 {R}
+C Nlc out {C}
+B§P P_in P_out I=abs(V(in)-V(out))*I(R_int)
+B§V_t 0 Phi I=(V(in)-V(out))/{N}
+C§h/2e Phi 0 329.1p
+L N001 Nlc {L}
+.ic V(Phi)=0 V(Nlc)=0
+.ends 1stack
+
+.param alpha=140.26 beta=74.429 gamma=2993.7 delta=14.966
+.tran 0 2 0 10u
+.ic V(Na)=0 V(Nb)=0 V(Nc)=0 V(Nd)=0
+.backanno
+.end
