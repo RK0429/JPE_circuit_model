@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import logging
 import math
 import os
 import subprocess
@@ -261,7 +262,7 @@ def extract_waveforms(
 ) -> tuple[pd.DataFrame, dict[str, float]]:
     """Parse LTspice RAW output into a down-sampled dataframe and summary."""
 
-    data_offset, variable_names, point_count = read_raw_header(raw_path)
+    data_offset, variable_names, header_points = read_raw_header(raw_path)
     if not variable_names or variable_names[0].lower() != "time":
         raise RuntimeError(f"Unexpected variable ordering in {raw_path}")
 
@@ -270,6 +271,24 @@ def extract_waveforms(
 
     dtype = np.dtype([("time", "<f8"), ("values", ("<f4", num_signals))])
     record_size = dtype.itemsize
+
+    data_bytes = raw_path.stat().st_size - data_offset
+    available_points = data_bytes // record_size
+    if available_points == 0:
+        raise RuntimeError(f"No waveform data detected in {raw_path}")
+    if available_points < header_points:
+        logging.warning(
+            "Header reports %s points but only %s are present; proceeding with available data",
+            header_points,
+            available_points,
+        )
+    elif available_points > header_points:
+        logging.warning(
+            "Header reports %s points but file stores %s; using header count",
+            header_points,
+            available_points,
+        )
+    point_count = min(header_points, available_points)
 
     sample_stride = max(1, math.ceil(point_count / target_samples))
     mins = np.full(num_signals, np.inf, dtype=np.float64)
