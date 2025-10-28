@@ -12,9 +12,9 @@ V§T_bath N007 0 -26.295
 R_th T N007 7162.3
 C_th T N007 100n
 R_mid Nd N001 8.29
-XX4 Nd Nc 0 T 1stack params: M=217/15 N=40 I_c=12m R=94.94m L=175.0n C=1.858u
-XX5 Nc Nb 0 T 1stack params: M=217/43 N=172 I_c=18m R=293m L=540.1n C=602.1n
-XX6 Nb Na 0 T 1stack params: M=217/159 N=636 I_c=18.05m R=1.082 L=1.995u C=163.0n
+XX4 Nd Nc T 0 1stack params: M=217/15 N=40 I_c=12m R=94.94m L=175.0n C=1.858u
+XX5 Nc Nb T 0 1stack params: M=217/43 N=172 I_c=18m R=293m L=540.1n C=602.1n
+XX6 Nb Na T 0 1stack params: M=217/159 N=636 I_c=18.05m R=1.082 L=1.995u C=163.0n
 
 * block symbol definitions
 .subckt 1stack in out P_out P_in
