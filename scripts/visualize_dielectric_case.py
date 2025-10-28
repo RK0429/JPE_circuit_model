@@ -23,6 +23,17 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
+def read_netlist_with_fallback(path: Path) -> str:
+    """Return netlist text handling legacy encodings such as CP1252."""
+
+    for encoding in ("utf-8", "cp1252", "latin-1"):
+        try:
+            return path.read_text(encoding=encoding)
+        except UnicodeDecodeError:
+            continue
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate DailyNote-style visualisations for dielectric runs",
@@ -136,7 +147,7 @@ def resolve_radiation_resistance(
 
 def extract_radiation_resistance(netlist: Path) -> float:
     pattern = re.compile(r"^R_rad\b\s+\S+\s+\S+\s+(\S+)", re.IGNORECASE)
-    for line in netlist.read_text(encoding="utf-8").splitlines():
+    for line in read_netlist_with_fallback(netlist).splitlines():
         match = pattern.match(line.strip())
         if match:
             try:

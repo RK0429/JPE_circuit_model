@@ -29,6 +29,7 @@ import subprocess
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+import shutil
 
 import numpy as np
 import pandas as pd
@@ -48,6 +49,18 @@ DEFAULT_SAVE_VARS = (
 DEFAULT_OPTIONS_LINE = (
     ".options reltol=2e-2 abstol=1e-8 chgtol=1e-12 trtol=7 method=gear maxord=2 gmin=1e-9"
 )
+
+
+def read_netlist_text(path: Path) -> tuple[str, str]:
+    """Return netlist content along with the detected encoding."""
+
+    for encoding in ("utf-8", "cp1252", "latin-1"):
+        try:
+            return path.read_text(encoding=encoding), encoding
+        except UnicodeDecodeError:
+            continue
+    # Fallback: decode replacing problematic bytes so that processing can continue.
+    return path.read_text(encoding="utf-8", errors="replace"), "utf-8"
 
 
 @dataclass(slots=True)
@@ -105,6 +118,11 @@ def parse_args() -> argparse.Namespace:
         help="Signals to persist via .save directive",
     )
     parser.add_argument(
+        "--omit-default-options",
+        action="store_true",
+        help="Skip injecting the default LTspice .options line when copying netlists.",
+    )
+    parser.add_argument(
         "--working-root",
         type=Path,
         default=PROJECT_ROOT.parent.parent / "tmp" / "dielectric_runs",
@@ -158,39 +176,71 @@ def insert_save_directive(
     original: Path,
     save_vars: Iterable[str],
     destination: Path,
+    *,
+    inject_options: bool = True,
 ) -> None:
     """Copy ``original`` to ``destination`` while injecting a .save directive."""
 
-    content = original.read_text(encoding="utf-8")
+    content, encoding = read_netlist_text(original)
     marker = ".tran"
     if marker not in content:
         raise RuntimeError(f"{original} does not contain a .tran directive")
 
-    save_line = ".save " + " ".join(save_vars) + "\n"
-    options_line = DEFAULT_OPTIONS_LINE + "\n"
+    save_line = ".save " + " ".join(save_vars)
+    insertion_lines = [save_line]
+    options_line = DEFAULT_OPTIONS_LINE if inject_options else None
+    if options_line is not None:
+        insertion_lines.append(options_line)
+    insertion_block = "\n".join(insertion_lines) + "\n"
 
     if ".save" in content:
-        content = content.replace(".save", save_line + ".save", 1)
+        if options_line and options_line not in content:
+            content = content.replace(".save", ".save\n" + options_line, 1)
     else:
-        prefix, suffix = content.split(marker, 1)
-        content = prefix + save_line + options_line + marker + suffix
+        idx = content.index(marker)
+        content = content[:idx] + insertion_block + content[idx:]
 
-    if DEFAULT_OPTIONS_LINE not in content:
-        content = content.replace(save_line, save_line + options_line, 1)
-
-    destination.write_text(content, encoding="utf-8")
+    destination.write_text(content, encoding=encoding)
 
 
-def run_ltspice(netlist: Path, exe: Path, exec_log: Path) -> None:
-    absolute_netlist = netlist.resolve()
-    netlist_for_wine = "Z:" + absolute_netlist.as_posix()
+def export_netlist(schematic: Path, exe: Path, export_log: Path) -> Path:
+    absolute = schematic.resolve()
+    schematic_for_wine = "Z:" + absolute.as_posix()
     cmd = [
         "wine",
         exe.as_posix(),
-        "-Run",
-        "-b",
-        netlist_for_wine,
+        "-netlist",
+        schematic_for_wine,
     ]
+
+    export_log.parent.mkdir(parents=True, exist_ok=True)
+    with export_log.open("wb") as log_file:
+        subprocess.run(cmd, check=True, stdout=log_file, stderr=subprocess.STDOUT)
+
+    netlist_path = schematic.with_suffix(".net")
+    if not netlist_path.exists():
+        raise FileNotFoundError(f"Netlist export failed for {schematic}")
+    return netlist_path
+
+
+def run_ltspice(netlist: Path, exe: Path, exec_log: Path, *, is_schematic: bool) -> None:
+    absolute_netlist = netlist.resolve()
+    netlist_for_wine = "Z:" + absolute_netlist.as_posix()
+    if is_schematic:
+        cmd = [
+            "wine",
+            exe.as_posix(),
+            "-Run",
+            netlist_for_wine,
+        ]
+    else:
+        cmd = [
+            "wine",
+            exe.as_posix(),
+            "-Run",
+            "-b",
+            netlist_for_wine,
+        ]
 
     exec_log.parent.mkdir(parents=True, exist_ok=True)
     with exec_log.open("wb") as log_file:
@@ -290,7 +340,11 @@ def extract_waveforms(
         )
     point_count = min(header_points, available_points)
 
-    sample_stride = max(1, math.ceil(point_count / target_samples))
+    target_count = min(target_samples, point_count)
+    sample_indices = np.linspace(
+        0, point_count - 1, num=target_count, dtype=np.int64
+    )
+    sample_pos = 0
     mins = np.full(num_signals, np.inf, dtype=np.float64)
     maxs = np.full(num_signals, -np.inf, dtype=np.float64)
 
@@ -307,10 +361,13 @@ def extract_waveforms(
     down_values: dict[str, list[float]] = {name: [] for name in signal_names}
 
     processed = 0
-    last_time = 0.0
+    max_time = -math.inf
+    max_time_vector: np.ndarray | None = None
     chunk_records = 200_000
 
     leftover = bytearray()
+    last_time = None
+    last_vector: np.ndarray | None = None
 
     with raw_path.open("rb") as handle:
         handle.seek(data_offset)
@@ -330,10 +387,10 @@ def extract_waveforms(
             )
 
             times = block["time"].astype(np.float64, copy=False)
-            values = block["values"].astype(np.float64)
+            values = block["values"].astype(np.float64, copy=False)
 
-            mins = np.minimum(mins, values.min(axis=0))
-            maxs = np.maximum(maxs, values.max(axis=0))
+            mins = np.minimum(mins, np.nanmin(values, axis=0))
+            maxs = np.maximum(maxs, np.nanmax(values, axis=0))
 
             count = values.shape[0]
             if tail_window > 0:
@@ -352,22 +409,49 @@ def extract_waveforms(
                     tail_pos = (tail_pos + count) % tail_window
                     tail_filled = min(tail_window, tail_filled + count)
 
-            indices = processed + np.arange(count)
-            mask = (indices % sample_stride) == 0
-            if mask.any():
-                down_time.extend(times[mask].tolist())
-                sampled = values[mask]
+            while sample_pos < target_count and sample_indices[sample_pos] < processed:
+                sample_pos += 1
+            upper = processed + count
+            while sample_pos < target_count and sample_indices[sample_pos] < upper:
+                local_idx = sample_indices[sample_pos] - processed
+                down_time.append(float(times[local_idx]))
                 for idx, name in enumerate(signal_names):
-                    down_values[name].extend(sampled[:, idx].tolist())
+                    down_values[name].append(float(values[local_idx, idx]))
+                sample_pos += 1
 
+            if count:
+                block_max_idx = int(np.argmax(times))
+                candidate_max = float(times[block_max_idx])
+                if candidate_max > max_time:
+                    max_time = candidate_max
+                    max_time_vector = values[block_max_idx].copy()
+            if count:
+                last_time = float(times[-1])
+                last_vector = values[-1].copy()
             processed += count
-            last_time = float(times[-1])
             leftover = bytearray(leftover[available * record_size :])
 
     if processed != point_count:
         raise RuntimeError(
             f"RAW file length mismatch for {raw_path}: expected {point_count}, got {processed}"
         )
+    if sample_pos != target_count:
+        logging.warning(
+            "Only gathered %s/%s samples from %s", sample_pos, target_count, raw_path
+        )
+
+    if max_time_vector is not None and not any(
+        abs(t - max_time) <= 1e-12 for t in down_time
+    ):
+        down_time.append(max_time)
+        for idx, name in enumerate(signal_names):
+            down_values[name].append(float(max_time_vector[idx]))
+
+    if last_vector is not None and last_time is not None:
+        if not down_time or abs(down_time[-1] - last_time) > 1e-12:
+            down_time.append(last_time)
+            for idx, name in enumerate(signal_names):
+                down_values[name].append(float(last_vector[idx]))
 
     if tail_window > 0 and tail_filled > 0:
         if tail_filled < tail_window:
@@ -380,9 +464,12 @@ def extract_waveforms(
     else:
         steady_mean = np.zeros(num_signals, dtype=np.float64)
 
+    if down_time:
+        max_time = max(max_time, max(down_time))
     summary: dict[str, float] = {
-        "time_stop_us": last_time,
-        "downsample_stride": float(sample_stride),
+        "time_stop_s": float(max_time),
+        "time_stop_us": float(max_time * 1e6),
+        "downsample_stride": float(point_count / target_count),
         "point_count": float(point_count),
     }
     for idx, name in enumerate(signal_names):
@@ -393,7 +480,12 @@ def extract_waveforms(
     data_dict: dict[str, list[float]] = {"time": down_time}
     for name in signal_names:
         data_dict[name] = down_values[name]
-    dataframe = pd.DataFrame(data_dict)
+    dataframe = (
+        pd.DataFrame(data_dict)
+        .sort_values("time", kind="mergesort")
+        .drop_duplicates(subset="time")
+        .reset_index(drop=True)
+    )
 
     return dataframe, summary
 
@@ -410,13 +502,21 @@ def render_plot(df: pd.DataFrame, destination: Path, case: str) -> None:
     current_columns = [col for col in df.columns if col.startswith("I(")]
 
     for column in voltage_columns:
-        ax_top.plot(time_axis, df[column], label=column)
+        values = df[column].to_numpy()
+        mask = np.isfinite(values)
+        if not np.any(mask):
+            continue
+        ax_top.plot(time_axis[mask], values[mask], label=column)
     ax_top.set_ylabel("Voltage [V]")
     ax_top.set_title(f"Case {case}: node voltages")
     ax_top.legend(loc="best")
 
     for column in current_columns:
-        ax_bottom.plot(time_axis, df[column] * 1e3, label=f"{column} (mA)")
+        values = (df[column] * 1e3).to_numpy()
+        mask = np.isfinite(values)
+        if not np.any(mask):
+            continue
+        ax_bottom.plot(time_axis[mask], values[mask], label=f"{column} (mA)")
     ax_bottom.set_ylabel("Current [mA]")
     ax_bottom.set_xlabel("t [µs]")
     ax_bottom.set_title("Source branch currents")
@@ -436,17 +536,50 @@ def run_case(
     working_root: Path,
     save_vars: list[str],
     keep_working: bool,
+    *,
+    inject_options: bool,
 ) -> SimulationResult:
     work_dir = working_root / case
     work_dir.mkdir(parents=True, exist_ok=True)
     netlist_copy = work_dir / netlist_path.name
-    insert_save_directive(netlist_path, save_vars, netlist_copy)
+    run_target: Path
+    export_log: Path | None = None
+    is_schematic = netlist_path.suffix.lower() == ".asc"
+    if is_schematic:
+        shutil.copy2(netlist_path, netlist_copy)
+        models_dir = PROJECT_ROOT / "models"
+        if models_dir.exists():
+            for dep_name in (
+                "1stack.asc",
+                "1stack.asy",
+                "1stack_RC.asc",
+                "1stack_RC.asy",
+            ):
+                source = models_dir / dep_name
+                if source.exists():
+                    shutil.copy2(source, work_dir / dep_name)
+        export_log = work_dir / f"{case}_netlist_export.log"
+        run_target = export_netlist(netlist_copy, exe, export_log)
+        insert_save_directive(
+            run_target,
+            save_vars,
+            run_target,
+            inject_options=inject_options,
+        )
+    else:
+        insert_save_directive(
+            netlist_path,
+            save_vars,
+            netlist_copy,
+            inject_options=inject_options,
+        )
+        run_target = netlist_copy
 
     exec_log = work_dir / f"{case}_ltspice_exec.log"
-    run_ltspice(netlist_copy, exe, exec_log)
+    run_ltspice(run_target, exe, exec_log, is_schematic=False)
 
-    raw_path = netlist_copy.with_suffix(".raw")
-    log_path = netlist_copy.with_suffix(".log")
+    raw_path = run_target.with_suffix(".raw")
+    log_path = run_target.with_suffix(".log")
 
     if not raw_path.exists():
         raise FileNotFoundError(f"RAW output not found: {raw_path}")
@@ -467,11 +600,17 @@ def run_case(
 
     raw_destination = case_dir / raw_path.name
     log_destination = case_dir / f"{netlist_path.stem}.log"
-    netlist_destination = case_dir / netlist_path.name
+    netlist_destination = case_dir / run_target.name
 
     raw_path.replace(raw_destination)
     convert_log(log_path, log_destination)
-    netlist_copy.replace(netlist_destination)
+    run_target.replace(netlist_destination)
+
+    if is_schematic:
+        asc_destination = case_dir / netlist_path.name
+        if asc_destination.exists():
+            asc_destination.unlink()
+        shutil.copy2(netlist_copy, asc_destination)
 
     op_source = work_dir / f"{netlist_path.stem}.op.raw"
     if op_source.exists():
@@ -482,6 +621,9 @@ def run_case(
 
     exec_dest = case_dir / exec_log.name
     exec_log.replace(exec_dest)
+    if export_log is not None and export_log.exists():
+        export_dest = case_dir / export_log.name
+        export_log.replace(export_dest)
 
     if not keep_working:
         try:
@@ -526,12 +668,19 @@ def main() -> None:
             working_root=working_root,
             save_vars=list(dict.fromkeys(args.save_vars)),
             keep_working=args.keep_working,
+            inject_options=not args.omit_default_options,
         )
         summaries.append(result.summary)
 
     if summaries:
         all_keys = {key for record in summaries for key in record.keys()}
-        base_fields = ["case", "time_stop_us", "point_count", "downsample_stride"]
+        base_fields = [
+            "case",
+            "time_stop_s",
+            "time_stop_us",
+            "point_count",
+            "downsample_stride",
+        ]
         other_fields = sorted(key for key in all_keys if key not in base_fields)
         fieldnames = base_fields + other_fields
         summary_table = data_dir / "summary.csv"
@@ -546,6 +695,7 @@ def main() -> None:
         "cases": list(cases.keys()),
         "ltspice_executable": str(exe),
         "save_variables": list(dict.fromkeys(args.save_vars)),
+        "omit_default_options": args.omit_default_options,
     }
     (data_dir / "run_metadata.json").write_text(
         json.dumps(metadata, indent=2), encoding="utf-8"
