@@ -1,4 +1,4 @@
-* Z:\Users\r-kobayashi\Documents\DoctoralResearch\DoctoralResearch\src\JPE_circuit_model\examples\JPE_3stacks.asc
+* C:\Users\ryota\Documents\DoctoralResearch\src\JPE_circuit_model\examples\JPE_3stacks.asc
 V Ndc 0 PWL(0 0 1 3 2 0)
 R_fg N006 Ndc 50
 L_ext N004 N006 10m
@@ -22,7 +22,7 @@ B§IJJ in out I={I_c}*sin(V(Phi))
 B§R_int in out I={M}*((V(in)-V(out))/({alpha}*(exp(-1*(V(P_out)-V(P_in))/{beta})+exp(-1*(V(P_out)-V(P_in))**2/{gamma}))+{delta}))
 R in N001 {R}
 C Nlc out {C}
-B§P P_in P_out I=abs(V(in)-V(out))*I(R_int)
+B§P P_in P_out I=(V(in)-V(out))*I(R_int)
 B§V_t 0 Phi I=(V(in)-V(out))/{N}
 C§h/2e Phi 0 329.1p
 L N001 Nlc {L}
