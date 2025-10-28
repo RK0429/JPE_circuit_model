@@ -133,7 +133,7 @@ class Segment:
         ]
         params_str = " ".join(params)
         return (
-            f"{self.label} {self.node_in} {self.node_out} 0 T "
+            f"{self.label} {self.node_in} {self.node_out} T 0 "
             f"1stack params: {params_str}"
         )
 
