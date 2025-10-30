@@ -142,17 +142,26 @@ def resolve_ltspice_executable(cli_value: Path | None) -> Path:
 
     folder = os.environ.get("LTSPICEFOLDER")
     exe_name = os.environ.get("LTSPICEEXECUTABLE", "XVIIx64.exe")
-    if folder is None:
-        default_folder = Path.home() / ".wine" / "drive_c" / "Program Files" / "LTC" / "LTspiceXVII"
-        candidate = default_folder / exe_name
+    candidates: list[Path] = []
+    if folder is not None:
+        candidates.append(Path(folder) / exe_name)
     else:
-        candidate = Path(folder) / exe_name
-
-    if not candidate.exists():
-        raise FileNotFoundError(
-            f"LTspice executable not found at {candidate}. Set --ltspice-exe or environment variables."
+        default_folder = (
+            Path.home() / ".wine" / "drive_c" / "Program Files" / "LTC" / "LTspiceXVII"
         )
-    return candidate
+        candidates.append(default_folder / exe_name)
+
+    # macOS LTspice bundle (native)
+    candidates.append(Path("/Applications/LTspice.app/Contents/MacOS/LTspice"))
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    raise FileNotFoundError(
+        "LTspice executable not found. Provide --ltspice-exe or set LTSPICEFOLDER / "
+        "LTSPICEEXECUTABLE."
+    )
 
 
 def discover_cases(netlist_dir: Path, explicit: list[str] | None) -> dict[str, Path]:
@@ -178,10 +187,23 @@ def insert_save_directive(
     destination: Path,
     *,
     inject_options: bool = True,
+    drop_existing_options: bool = False,
 ) -> None:
     """Copy ``original`` to ``destination`` while injecting a .save directive."""
 
     content, encoding = read_netlist_text(original)
+    if drop_existing_options:
+        trailing_newline = content.endswith("\n")
+        lines = content.splitlines()
+        filtered = [
+            line
+            for line in lines
+            if not line.lstrip().lower().startswith(".options")
+        ]
+        if filtered != lines:
+            content = "\n".join(filtered)
+            if trailing_newline:
+                content += "\n"
     marker = ".tran"
     if marker not in content:
         raise RuntimeError(f"{original} does not contain a .tran directive")
@@ -205,13 +227,11 @@ def insert_save_directive(
 
 def export_netlist(schematic: Path, exe: Path, export_log: Path) -> Path:
     absolute = schematic.resolve()
-    schematic_for_wine = "Z:" + absolute.as_posix()
-    cmd = [
-        "wine",
-        exe.as_posix(),
-        "-netlist",
-        schematic_for_wine,
-    ]
+    if exe.suffix.lower() == ".exe":
+        schematic_arg = "Z:" + absolute.as_posix()
+        cmd = ["wine", exe.as_posix(), "-netlist", schematic_arg]
+    else:
+        cmd = [exe.as_posix(), "-netlist", str(absolute)]
 
     export_log.parent.mkdir(parents=True, exist_ok=True)
     with export_log.open("wb") as log_file:
@@ -223,26 +243,35 @@ def export_netlist(schematic: Path, exe: Path, export_log: Path) -> Path:
     return netlist_path
 
 
-def run_ltspice(netlist: Path, exe: Path, exec_log: Path, *, is_schematic: bool) -> None:
-    absolute_netlist = netlist.resolve()
-    netlist_for_wine = "Z:" + absolute_netlist.as_posix()
-    if is_schematic:
-        cmd = [
-            "wine",
-            exe.as_posix(),
-            "-Run",
-            netlist_for_wine,
-        ]
-    else:
-        cmd = [
-            "wine",
-            exe.as_posix(),
-            "-Run",
-            "-b",
-            netlist_for_wine,
-        ]
+def _build_ltspice_command(
+    exe: Path, target: Path, *, run_batch: bool, is_schematic: bool
+) -> list[str]:
+    exe_str = exe.as_posix()
+    target_path = target.resolve()
+    if exe.suffix.lower() == ".exe":
+        netlist_arg = "Z:" + target_path.as_posix()
+        cmd = ["wine", exe_str, "-Run"]
+        if run_batch:
+            cmd.append("-b")
+        cmd.append(netlist_arg)
+        return cmd
 
+    # Native (e.g., macOS) executable
+    cmd = [exe_str, "-Run"]
+    if run_batch:
+        cmd.append("-b")
+    cmd.append(str(target_path))
+    return cmd
+
+
+def run_ltspice(netlist: Path, exe: Path, exec_log: Path, *, is_schematic: bool) -> None:
     exec_log.parent.mkdir(parents=True, exist_ok=True)
+    cmd = _build_ltspice_command(
+        exe=exe,
+        target=netlist,
+        run_batch=not is_schematic,
+        is_schematic=is_schematic,
+    )
     with exec_log.open("wb") as log_file:
         subprocess.run(cmd, check=True, stdout=log_file, stderr=subprocess.STDOUT)
 
@@ -277,8 +306,6 @@ def read_raw_header(raw_path: Path) -> tuple[int, list[str], int]:
                 header_end = idx + len(pattern)
                 break
         data_offset = header_end
-        while data_offset + 1 < len(buffer) and buffer[data_offset : data_offset + 2] == b"\x00\x00":
-            data_offset += 2
         header_text = buffer[:header_end].decode("utf-16le")
 
     lines = [line.strip() for line in header_text.splitlines() if line.strip()]
@@ -322,8 +349,32 @@ def extract_waveforms(
     dtype = np.dtype([("time", "<f8"), ("values", ("<f4", num_signals))])
     record_size = dtype.itemsize
 
-    data_bytes = raw_path.stat().st_size - data_offset
+    file_size = raw_path.stat().st_size
+    data_bytes = file_size - data_offset
     available_points = data_bytes // record_size
+    if data_bytes % record_size != 0:
+        aligned = False
+        for shift in range(1, record_size):
+            adjusted_offset = data_offset + shift
+            if adjusted_offset >= file_size:
+                break
+            bytes_remaining = file_size - adjusted_offset
+            if bytes_remaining % record_size == 0:
+                logging.warning(
+                    "Adjusted RAW data offset by %s bytes to restore alignment for %s",
+                    shift,
+                    raw_path,
+                )
+                data_offset = adjusted_offset
+                data_bytes = bytes_remaining
+                available_points = data_bytes // record_size
+                aligned = True
+                break
+        if not aligned:
+            raise RuntimeError(
+                f"RAW record alignment failure for {raw_path}: "
+                f"{data_bytes} bytes remaining is not divisible by record size {record_size}"
+            )
     if available_points == 0:
         raise RuntimeError(f"No waveform data detected in {raw_path}")
     if available_points < header_points:
@@ -565,6 +616,7 @@ def run_case(
             save_vars,
             run_target,
             inject_options=inject_options,
+            drop_existing_options=not inject_options,
         )
     else:
         insert_save_directive(
@@ -572,6 +624,7 @@ def run_case(
             save_vars,
             netlist_copy,
             inject_options=inject_options,
+            drop_existing_options=not inject_options,
         )
         run_target = netlist_copy
 
