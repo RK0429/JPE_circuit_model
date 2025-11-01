@@ -11,13 +11,15 @@ workflow remains reproducible inside the repository.
 
 from __future__ import annotations
 
+# ruff: noqa: TRY003 - CLI surfaces descriptive error messages for operators.
 import argparse
 import json
+import logging
 import math
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -101,10 +103,16 @@ SI_SUFFIXES = {
     "F": 1e-15,
     "A": 1e-18,
 }
+MIN_SUFFIX_LENGTH = 2
 
 
 class NetlistParseError(RuntimeError):
     """Raised when a required value cannot be extracted from the netlist."""
+
+
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
 def parse_spice_number(token: str) -> float:
@@ -117,7 +125,7 @@ def parse_spice_number(token: str) -> float:
         upper = token.upper()
         if upper.endswith("MEG"):
             return float(upper[:-3]) * SI_SUFFIXES["MEG"]
-        if len(upper) < 2:
+        if len(upper) < MIN_SUFFIX_LENGTH:
             raise
         suffix = upper[-1]
         if suffix not in SI_SUFFIXES:
@@ -158,7 +166,7 @@ def extract_radiation_resistance(netlist: Path) -> float:
         if match:
             try:
                 return parse_spice_number(match.group(1))
-            except Exception as exc:  # noqa: BLE001 - surface parsing issue
+            except ValueError as exc:
                 raise NetlistParseError(
                     f"Failed to parse R_rad value from {netlist}: {line.strip()}"
                 ) from exc
@@ -270,8 +278,8 @@ def plot_dc_scatter(df: pd.DataFrame, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
 
     delta_v = df["delta_v"].to_numpy()
-    power_uW = df["power_uW"].to_numpy()
-    current_mA = df["current_mA"].to_numpy()
+    power_uw = df["power_uW"].to_numpy()
+    current_ma = df["current_mA"].to_numpy()
 
     color_data = df["power_w"].to_numpy()
 
@@ -291,16 +299,16 @@ def plot_dc_scatter(df: pd.DataFrame, destination: Path) -> None:
         "linewidths": 0,
     }
 
-    ax_power.scatter(delta_v, power_uW, **scatter_kwargs)
-    ax_power.set_ylabel("Radiated Power [µW]")
+    ax_power.scatter(delta_v, power_uw, **scatter_kwargs)
+    ax_power.set_ylabel("Radiated Power [μW]")
     ax_power.set_xticklabels([])
 
-    ax_joint.scatter(delta_v, current_mA, **scatter_kwargs)
+    ax_joint.scatter(delta_v, current_ma, **scatter_kwargs)
     ax_joint.set_xlabel("Differential Voltage [V]")
     ax_joint.set_ylabel("Return Current [mA]")
 
-    ax_current.scatter(power_uW, current_mA, **scatter_kwargs)
-    ax_current.set_xlabel("Radiated Power [µW]")
+    ax_current.scatter(power_uw, current_ma, **scatter_kwargs)
+    ax_current.set_xlabel("Radiated Power [μW]")
     ax_current.set_yticklabels([])
 
     fig.tight_layout()
@@ -335,7 +343,7 @@ def plot_waveforms(sample_df: pd.DataFrame, destination: Path, case: str) -> Non
             continue
         ax_bottom.plot(time_axis[mask], values[mask], label=f"{column} (mA)")
     ax_bottom.set_ylabel("Current [mA]")
-    ax_bottom.set_xlabel("t [µs]")
+    ax_bottom.set_xlabel("t [μs]")
     ax_bottom.set_title("Source branch currents")
     ax_bottom.legend(loc="best")
 
@@ -355,7 +363,7 @@ def _locate_raw_file(case_dir: Path) -> Path:
     return candidates[0]
 
 
-def aggregate_raw_waveforms(
+def aggregate_raw_waveforms(  # noqa: PLR0912, PLR0914, PLR0915
     raw_path: Path,
     *,
     resample_rule: str,
@@ -594,7 +602,7 @@ def aggregate_raw_waveforms(
     sum_irad_sq = sum_irad_sq[valid_mask]
 
     time_seconds = sum_time_rel / counts_nz
-    time_seconds = time_seconds - time_seconds.min()
+    time_seconds -= time_seconds.min()
 
     resampled_dict: dict[str, np.ndarray] = {
         "time_seconds": time_seconds,
@@ -657,7 +665,7 @@ def aggregate_raw_waveforms(
     return sample_df, resampled_df, summary
 
 
-def generate_visualisations(args: argparse.Namespace) -> ProcessedData:
+def generate_visualisations(args: argparse.Namespace) -> ProcessedData:  # noqa: PLR0914
     case = args.case
     case_dir = args.data_root / case
     raw_path = _locate_raw_file(case_dir)
@@ -688,12 +696,10 @@ def generate_visualisations(args: argparse.Namespace) -> ProcessedData:
         (resampled["time_seconds"].iloc[-1] - resampled["time_seconds"].iloc[0]) * 1e3
     )
 
-    duration_s = aggregation["duration_s"]
-
-    mean_power_uW = float(resampled["power_uW"].mean())
-    peak_power_uW = float(resampled["power_uW"].max())
-    mean_current_mA = float(resampled["current_mA"].mean())
-    peak_current_mA = float(np.abs(resampled["current_mA"]).max())
+    mean_power_uw = float(resampled["power_uW"].mean())
+    peak_power_uw = float(resampled["power_uW"].max())
+    mean_current_ma = float(resampled["current_mA"].mean())
+    peak_current_ma = float(np.abs(resampled["current_mA"]).max())
     mean_delta_v = float(resampled["delta_v"].mean())
     peak_delta_v = float(np.max(np.abs(resampled["delta_v"])))
 
@@ -701,10 +707,10 @@ def generate_visualisations(args: argparse.Namespace) -> ProcessedData:
         "case": case,
         "radiation_resistance_ohm": resistance,
         "time_span_ms": time_span_ms,
-        "mean_power_uW": mean_power_uW,
-        "peak_power_uW": peak_power_uW,
-        "mean_current_mA": mean_current_mA,
-        "peak_current_mA": peak_current_mA,
+        "mean_power_uW": mean_power_uw,
+        "peak_power_uW": peak_power_uw,
+        "mean_current_mA": mean_current_ma,
+        "peak_current_mA": peak_current_ma,
         "mean_delta_v": mean_delta_v,
         "peak_delta_v": peak_delta_v,
     }
@@ -716,7 +722,7 @@ def generate_visualisations(args: argparse.Namespace) -> ProcessedData:
     plot_time_series(
         time_axis_ms,
         resampled["power_uW"],
-        ylabel="Radiated Power [µW]",
+        ylabel="Radiated Power [μW]",
         title=f"Case {case}: Radiated Power (resampled {args.resample})",
         destination=figure_case_dir / f"{case}_power_time.png",
     )
@@ -759,7 +765,7 @@ def generate_visualisations(args: argparse.Namespace) -> ProcessedData:
 def main() -> None:  # pragma: no cover - CLI entry
     args = parse_args()
     result = generate_visualisations(args)
-    print(f"[INFO] Case {result.case} processed. Figures stored in {args.figure_dir}.")
+    logger.info("Case %s processed. Figures stored in %s.", result.case, args.figure_dir)
 
 
 if __name__ == "__main__":

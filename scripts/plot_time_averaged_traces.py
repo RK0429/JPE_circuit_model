@@ -38,7 +38,7 @@ def parse_args() -> argparse.Namespace:
 def load_time_series(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path, sep="\t")
     if "time" not in df.columns:
-        raise KeyError("time column missing from TSV")
+        raise KeyError("time column missing from TSV")  # noqa: TRY003 - keep descriptive message for operators
     df["time"] = pd.to_datetime(df["time"])
     df["elapsed_ms"] = (df["time"] - df["time"].iloc[0]).dt.total_seconds() * 1e3
     if {"V(nt)", "V(na)"} <= set(df.columns):
