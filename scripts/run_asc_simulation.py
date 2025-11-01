@@ -11,21 +11,24 @@ CSV/JSON artefacts and quick-look plots.
 from __future__ import annotations
 
 import argparse
+import importlib.util
+import logging
+import sys
 from pathlib import Path
 
 SCRIPT_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_ROOT.parent
 
-# Dynamically load the dielectric runner to reuse its helpers without turning the
-# scripts directory into a package (which would break existing CLI usage).
-import importlib.util
-import sys
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 _RUNNER_SPEC = importlib.util.spec_from_file_location(
     "_dielectric_runner", SCRIPT_ROOT / "run_dielectric_simulations.py"
 )
 _dielectric = importlib.util.module_from_spec(_RUNNER_SPEC)
-assert _RUNNER_SPEC.loader is not None  # for mypy
+if _RUNNER_SPEC.loader is None:
+    raise RuntimeError("Failed to load run_dielectric_simulations module")  # noqa: TRY003 - recoverable configuration issue
 sys.modules["_dielectric_runner"] = _dielectric
 _RUNNER_SPEC.loader.exec_module(_dielectric)
 
@@ -91,7 +94,7 @@ def main() -> None:
     args = parse_args()
     asc_path = args.asc_path.resolve()
     if not asc_path.exists():
-        raise FileNotFoundError(f"Schematic not found: {asc_path}")
+        raise FileNotFoundError(f"Schematic not found: {asc_path}")  # noqa: TRY003 - include missing path
 
     case = args.case_name or asc_path.stem
     data_dir = args.data_dir.resolve()
@@ -104,7 +107,7 @@ def main() -> None:
 
     exe = _dielectric.resolve_ltspice_executable(args.ltspice_exe)
 
-    print(f"[INFO] Running schematic {asc_path} as case '{case}' via {exe}")
+    logger.info("Running schematic %s as case '%s' via %s", asc_path, case, exe)
     _dielectric.run_case(
         case=case,
         netlist_path=asc_path,

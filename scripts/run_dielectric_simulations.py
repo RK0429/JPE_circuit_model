@@ -19,18 +19,21 @@ The script keeps the example netlist folder untouched by moving all artefacts in
 
 from __future__ import annotations
 
+# ruff: noqa: TRY003 - CLI requires descriptive operator-facing error messages.
 import argparse
+import contextlib
 import csv
 import json
 import logging
 import math
 import os
-import subprocess
+import shutil
+import subprocess  # noqa: S404 - subprocess is necessary for LTspice invocation
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-import shutil
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -49,6 +52,13 @@ DEFAULT_SAVE_VARS = (
 DEFAULT_OPTIONS_LINE = (
     ".options reltol=2e-2 abstol=1e-8 chgtol=1e-12 trtol=7 method=gear maxord=2 gmin=1e-9"
 )
+
+RAW_HEADER_MIN_PARTS = 3
+TIME_ALIGNMENT_TOL = 1e-12
+
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
 def read_netlist_text(path: Path) -> tuple[str, str]:
@@ -235,7 +245,9 @@ def export_netlist(schematic: Path, exe: Path, export_log: Path) -> Path:
 
     export_log.parent.mkdir(parents=True, exist_ok=True)
     with export_log.open("wb") as log_file:
-        subprocess.run(cmd, check=True, stdout=log_file, stderr=subprocess.STDOUT)
+        subprocess.run(  # noqa: S603 - commands originate from vetted netlist workflow
+            cmd, check=True, stdout=log_file, stderr=subprocess.STDOUT
+        )
 
     netlist_path = schematic.with_suffix(".net")
     if not netlist_path.exists():
@@ -273,7 +285,9 @@ def run_ltspice(netlist: Path, exe: Path, exec_log: Path, *, is_schematic: bool)
         is_schematic=is_schematic,
     )
     with exec_log.open("wb") as log_file:
-        subprocess.run(cmd, check=True, stdout=log_file, stderr=subprocess.STDOUT)
+        subprocess.run(  # noqa: S603 - commands originate from vetted netlist workflow
+            cmd, check=True, stdout=log_file, stderr=subprocess.STDOUT
+        )
 
 
 def convert_log(log_path: Path, destination: Path) -> None:
@@ -323,7 +337,7 @@ def read_raw_header(raw_path: Path) -> tuple[int, list[str], int]:
             continue
         elif parsing_vars and (num_vars is None or len(variable_names) < num_vars):
             parts = line.split()
-            if len(parts) >= 3:
+            if len(parts) >= RAW_HEADER_MIN_PARTS:
                 variable_names.append(parts[1])
 
     if num_vars is None or num_points is None or len(variable_names) != num_vars:
@@ -332,7 +346,7 @@ def read_raw_header(raw_path: Path) -> tuple[int, list[str], int]:
     return data_offset, variable_names, num_points
 
 
-def extract_waveforms(
+def extract_waveforms(  # noqa: PLR0912, PLR0914, PLR0915
     raw_path: Path,
     *,
     target_samples: int = 20_000,
@@ -492,17 +506,20 @@ def extract_waveforms(
         )
 
     if max_time_vector is not None and not any(
-        abs(t - max_time) <= 1e-12 for t in down_time
+        abs(t - max_time) <= TIME_ALIGNMENT_TOL for t in down_time
     ):
         down_time.append(max_time)
         for idx, name in enumerate(signal_names):
             down_values[name].append(float(max_time_vector[idx]))
 
-    if last_vector is not None and last_time is not None:
-        if not down_time or abs(down_time[-1] - last_time) > 1e-12:
-            down_time.append(last_time)
-            for idx, name in enumerate(signal_names):
-                down_values[name].append(float(last_vector[idx]))
+    if (
+        last_vector is not None
+        and last_time is not None
+        and (not down_time or abs(down_time[-1] - last_time) > TIME_ALIGNMENT_TOL)
+    ):
+        down_time.append(last_time)
+        for idx, name in enumerate(signal_names):
+            down_values[name].append(float(last_vector[idx]))
 
     if tail_window > 0 and tail_filled > 0:
         if tail_filled < tail_window:
@@ -516,7 +533,9 @@ def extract_waveforms(
         steady_mean = np.zeros(num_signals, dtype=np.float64)
 
     if down_time:
-        max_time = max(max_time, max(down_time))
+        down_time_max = max(down_time)
+        if down_time_max > max_time:
+            max_time = down_time_max
     summary: dict[str, float] = {
         "time_stop_s": float(max_time),
         "time_stop_us": float(max_time * 1e6),
@@ -542,8 +561,6 @@ def extract_waveforms(
 
 
 def render_plot(df: pd.DataFrame, destination: Path, case: str) -> None:
-    import matplotlib.pyplot as plt
-
     destination.parent.mkdir(parents=True, exist_ok=True)
 
     fig, (ax_top, ax_bottom) = plt.subplots(2, 1, sharex=True, figsize=(7.2, 6.0))
@@ -569,7 +586,7 @@ def render_plot(df: pd.DataFrame, destination: Path, case: str) -> None:
             continue
         ax_bottom.plot(time_axis[mask], values[mask], label=f"{column} (mA)")
     ax_bottom.set_ylabel("Current [mA]")
-    ax_bottom.set_xlabel("t [µs]")
+    ax_bottom.set_xlabel("t [μs]")
     ax_bottom.set_title("Source branch currents")
     ax_bottom.legend(loc="best")
 
@@ -578,7 +595,7 @@ def render_plot(df: pd.DataFrame, destination: Path, case: str) -> None:
     plt.close(fig)
 
 
-def run_case(
+def run_case(  # noqa: PLR0913, PLR0914, PLR0915
     case: str,
     netlist_path: Path,
     exe: Path,
@@ -679,11 +696,8 @@ def run_case(
         export_log.replace(export_dest)
 
     if not keep_working:
-        try:
+        with contextlib.suppress(OSError):
             work_dir.rmdir()
-        except OSError:
-            # Residual files (e.g., LTspice lock files) can be ignored.
-            pass
 
     return SimulationResult(
         case=case,
@@ -711,7 +725,7 @@ def main() -> None:
     summaries: list[dict[str, float]] = []
 
     for case, netlist_path in cases.items():
-        print(f"[INFO] Running case {case} using {netlist_path}")
+        logger.info("Running case %s using %s", case, netlist_path)
         result = run_case(
             case=case,
             netlist_path=netlist_path,
@@ -726,7 +740,7 @@ def main() -> None:
         summaries.append(result.summary)
 
     if summaries:
-        all_keys = {key for record in summaries for key in record.keys()}
+        all_keys = {key for record in summaries for key in record}
         base_fields = [
             "case",
             "time_stop_s",
@@ -745,7 +759,7 @@ def main() -> None:
 
     metadata = {
         "netlist_dir": str(args.netlist_dir.resolve()),
-        "cases": list(cases.keys()),
+        "cases": list(cases),
         "ltspice_executable": str(exe),
         "save_variables": list(dict.fromkeys(args.save_vars)),
         "omit_default_options": args.omit_default_options,
