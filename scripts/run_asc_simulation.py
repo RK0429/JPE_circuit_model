@@ -26,9 +26,10 @@ if not logger.handlers:
 _RUNNER_SPEC = importlib.util.spec_from_file_location(
     "_dielectric_runner", SCRIPT_ROOT / "run_dielectric_simulations.py"
 )
-_dielectric = importlib.util.module_from_spec(_RUNNER_SPEC)
-if _RUNNER_SPEC.loader is None:
+if _RUNNER_SPEC is None or _RUNNER_SPEC.loader is None:
     raise RuntimeError("Failed to load run_dielectric_simulations module")  # noqa: TRY003 - recoverable configuration issue
+
+_dielectric = importlib.util.module_from_spec(_RUNNER_SPEC)
 sys.modules["_dielectric_runner"] = _dielectric
 _RUNNER_SPEC.loader.exec_module(_dielectric)
 

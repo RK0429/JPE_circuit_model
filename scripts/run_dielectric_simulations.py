@@ -32,10 +32,12 @@ import subprocess  # noqa: S404 - subprocess is necessary for LTspice invocation
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.axes import Axes
 
 SCRIPT_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_ROOT.parent
@@ -79,7 +81,7 @@ class SimulationResult:
 
     case: str
     data_frame: pd.DataFrame
-    summary: dict[str, float]
+    summary: dict[str, float | str]
     raw_file: Path
     log_file: Path
     netlist_file: Path
@@ -562,7 +564,10 @@ def extract_waveforms(  # noqa: PLR0912, PLR0914, PLR0915
 def render_plot(df: pd.DataFrame, destination: Path, case: str) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
 
-    fig, (ax_top, ax_bottom) = plt.subplots(2, 1, sharex=True, figsize=(7.2, 6.0))
+    fig, axes_obj = plt.subplots(2, 1, sharex=True, figsize=(7.2, 6.0))
+    axes_array = np.asarray(axes_obj, dtype=object)
+    ax_top = cast(Axes, axes_array[0])
+    ax_bottom = cast(Axes, axes_array[1])
     time_axis = df["time"]
 
     voltage_columns = [col for col in df.columns if col.startswith("V(")]
@@ -721,7 +726,7 @@ def main() -> None:
     figure_dir.mkdir(parents=True, exist_ok=True)
     working_root.mkdir(parents=True, exist_ok=True)
 
-    summaries: list[dict[str, float]] = []
+    summaries: list[dict[str, float | str]] = []
 
     for case, netlist_path in cases.items():
         logger.info("Running case %s using %s", case, netlist_path)

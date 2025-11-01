@@ -20,10 +20,12 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.axes import Axes
 
 try:
     from .run_dielectric_simulations import read_raw_header
@@ -261,8 +263,10 @@ def plot_time_series(
 ) -> None:
     _configure_figure_defaults()
     destination.parent.mkdir(parents=True, exist_ok=True)
+    time_array = np.asarray(time_axis, dtype=float)
+    value_array = np.asarray(values, dtype=float)
     fig, ax = plt.subplots(figsize=(7.0, 3.2))
-    ax.plot(time_axis, values, linewidth=1.2)
+    ax.plot(time_array, value_array, linewidth=1.2)
     ax.set_xlabel("Time [ms]")
     ax.set_ylabel(ylabel)
     ax.set_title(title)
@@ -318,7 +322,10 @@ def plot_waveforms(sample_df: pd.DataFrame, destination: Path, case: str) -> Non
     _configure_figure_defaults()
     destination.parent.mkdir(parents=True, exist_ok=True)
 
-    fig, (ax_top, ax_bottom) = plt.subplots(2, 1, sharex=True, figsize=(7.2, 6.0))
+    fig, axes_obj = plt.subplots(2, 1, sharex=True, figsize=(7.2, 6.0))
+    axes_array = np.asarray(axes_obj, dtype=object)
+    ax_top = cast(Axes, axes_array[0])
+    ax_bottom = cast(Axes, axes_array[1])
     time_axis = sample_df["time"]
 
     voltage_columns = [col for col in sample_df.columns if col.startswith("V(")]
@@ -369,7 +376,7 @@ def aggregate_raw_waveforms(  # noqa: PLR0912, PLR0914, PLR0915
     resistance: float,
     sample_target: int = 20_000,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, float]]:
-    resample_seconds = pd.Timedelta(resample_rule).total_seconds()
+    resample_seconds = float(pd.to_timedelta(resample_rule).total_seconds())
     if resample_seconds <= 0:
         raise ValueError(f"Invalid resample rule {resample_rule!r}")
 
@@ -625,9 +632,6 @@ def aggregate_raw_waveforms(  # noqa: PLR0912, PLR0914, PLR0915
     for name in signal_list:
         sample_dict[name] = down_values[name]
     sample_df = pd.DataFrame(sample_dict).sort_values("time", kind="mergesort").reset_index(drop=True)
-
-    if first_time is None or last_time is None:
-        raise RuntimeError(f"Failed to capture time bounds for {raw_path}")
 
     if first_time is None or last_time is None:
         raise RuntimeError(f"Failed to capture time bounds for {raw_path}")
