@@ -213,9 +213,7 @@ def enrich_dataframe(
 
     time_index = pd.to_timedelta(df_sorted["time_seconds"], unit=time_unit)
     df_sorted = df_sorted.assign(time_td=time_index)
-    df_sorted = df_sorted.set_index("time_td", drop=False)
-
-    return df_sorted
+    return df_sorted.set_index("time_td", drop=False)
 
 
 def resample_dataframe(df: pd.DataFrame, rule: str) -> pd.DataFrame:
@@ -490,8 +488,8 @@ def aggregate_raw_waveforms(  # noqa: PLR0912, PLR0914, PLR0915
     total_ignd = 0.0
     total_delta_v = 0.0
 
-    mins = {name: np.inf for name in signal_list}
-    maxs = {name: -np.inf for name in signal_list}
+    mins = dict.fromkeys(signal_list, np.inf)
+    maxs = dict.fromkeys(signal_list, -np.inf)
 
     first_time: float | None = None
     last_time: float | None = None
@@ -665,7 +663,7 @@ def aggregate_raw_waveforms(  # noqa: PLR0912, PLR0914, PLR0915
     return sample_df, resampled_df, summary
 
 
-def generate_visualisations(args: argparse.Namespace) -> ProcessedData:  # noqa: PLR0914
+def generate_visualisations(args: argparse.Namespace) -> ProcessedData:
     case = args.case
     case_dir = args.data_root / case
     raw_path = _locate_raw_file(case_dir)
@@ -678,7 +676,7 @@ def generate_visualisations(args: argparse.Namespace) -> ProcessedData:  # noqa:
     )
 
     signals = ["V(nd)", "V(na)", "V(t)", "V(nc)", "V(nb)", "I(R_rad)", "I(R_gnd)"]
-    sample_df, resampled, aggregation = aggregate_raw_waveforms(
+    sample_df, resampled, _aggregation = aggregate_raw_waveforms(
         raw_path,
         resample_rule=args.resample,
         signals=signals,

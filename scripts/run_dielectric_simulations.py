@@ -534,8 +534,7 @@ def extract_waveforms(  # noqa: PLR0912, PLR0914, PLR0915
 
     if down_time:
         down_time_max = max(down_time)
-        if down_time_max > max_time:
-            max_time = down_time_max
+        max_time = max(max_time, down_time_max)
     summary: dict[str, float] = {
         "time_stop_s": float(max_time),
         "time_stop_us": float(max_time * 1e6),
@@ -595,7 +594,7 @@ def render_plot(df: pd.DataFrame, destination: Path, case: str) -> None:
     plt.close(fig)
 
 
-def run_case(  # noqa: PLR0913, PLR0914, PLR0915
+def run_case(  # noqa: PLR0913, PLR0914, PLR0915, PLR0917
     case: str,
     netlist_path: Path,
     exe: Path,
