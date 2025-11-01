@@ -20,7 +20,13 @@ from pathlib import Path
 from typing import Iterable
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+
+try:
+    from .run_dielectric_simulations import read_raw_header
+except ImportError:  # pragma: no cover - allow direct execution
+    from run_dielectric_simulations import read_raw_header
 
 
 def read_netlist_with_fallback(path: Path) -> str:
@@ -166,7 +172,7 @@ class ProcessedData:
     resampled: pd.DataFrame
     power_resistance: float
     netlist_path: Path
-    input_csv: Path
+    raw_path: Path
 
 
 def load_timeseries(csv_path: Path) -> pd.DataFrame:
@@ -302,10 +308,359 @@ def plot_dc_scatter(df: pd.DataFrame, destination: Path) -> None:
     plt.close(fig)
 
 
+def plot_waveforms(sample_df: pd.DataFrame, destination: Path, case: str) -> None:
+    _configure_figure_defaults()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    fig, (ax_top, ax_bottom) = plt.subplots(2, 1, sharex=True, figsize=(7.2, 6.0))
+    time_axis = sample_df["time"]
+
+    voltage_columns = [col for col in sample_df.columns if col.startswith("V(")]
+    current_columns = [col for col in sample_df.columns if col.startswith("I(")]
+
+    for column in voltage_columns:
+        values = sample_df[column].to_numpy()
+        mask = np.isfinite(values)
+        if not np.any(mask):
+            continue
+        ax_top.plot(time_axis[mask], values[mask], label=column)
+    ax_top.set_ylabel("Voltage [V]")
+    ax_top.set_title(f"Case {case}: node voltages")
+    ax_top.legend(loc="best")
+
+    for column in current_columns:
+        values = (sample_df[column] * 1e3).to_numpy()
+        mask = np.isfinite(values)
+        if not np.any(mask):
+            continue
+        ax_bottom.plot(time_axis[mask], values[mask], label=f"{column} (mA)")
+    ax_bottom.set_ylabel("Current [mA]")
+    ax_bottom.set_xlabel("t [µs]")
+    ax_bottom.set_title("Source branch currents")
+    ax_bottom.legend(loc="best")
+
+    fig.tight_layout()
+    fig.savefig(destination, dpi=300)
+    plt.close(fig)
+
+
+def _locate_raw_file(case_dir: Path) -> Path:
+    candidates = sorted(
+        p for p in case_dir.glob("*.raw") if not p.name.lower().endswith(".op.raw")
+    )
+    if not candidates:
+        raise FileNotFoundError(f"No transient RAW file found under {case_dir}")
+    if len(candidates) > 1:
+        raise RuntimeError(f"Multiple RAW files found under {case_dir}: {candidates}")
+    return candidates[0]
+
+
+def aggregate_raw_waveforms(
+    raw_path: Path,
+    *,
+    resample_rule: str,
+    signals: Iterable[str],
+    resistance: float,
+    sample_target: int = 20_000,
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, float]]:
+    resample_seconds = pd.Timedelta(resample_rule).total_seconds()
+    if resample_seconds <= 0:
+        raise ValueError(f"Invalid resample rule {resample_rule!r}")
+
+    data_offset, variable_names, point_count = read_raw_header(raw_path)
+    if not variable_names or variable_names[0].lower() != "time":
+        raise RuntimeError(f"{raw_path} does not expose a leading time column")
+    value_names = variable_names[1:]
+    name_lookup = {name.lower(): idx for idx, name in enumerate(value_names)}
+
+    signal_list = list(signals)
+    required = {"V(nd)", "V(na)", "I(R_rad)", "I(R_gnd)", "V(t)"}
+    missing_required = [name for name in required if name.lower() not in {s.lower() for s in signal_list}]
+    if missing_required:
+        raise ValueError(f"Missing required signals for aggregation: {missing_required}")
+
+    idx_irad = signal_list.index("I(R_rad)")
+    idx_ignd = signal_list.index("I(R_gnd)")
+    idx_vnd = signal_list.index("V(nd)")
+    idx_vna = signal_list.index("V(na)")
+    signal_indices: list[int] = []
+    for name in signal_list:
+        idx = name_lookup.get(name.lower())
+        if idx is None:
+            raise KeyError(f"{raw_path} does not contain signal {name}")
+        signal_indices.append(idx)
+
+    dtype = np.dtype([("time", "<f8"), ("values", ("<f4", len(value_names)))])
+    record_size = dtype.itemsize
+
+    bin_offset = 0
+    counts = np.zeros(0, dtype=np.float64)
+    sum_time_rel = np.zeros(0, dtype=np.float64)
+    sum_signals: dict[str, np.ndarray] = {
+        name: np.zeros(0, dtype=np.float64) for name in signal_list
+    }
+    sum_irad_sq = np.zeros(0, dtype=np.float64)
+
+    chunk_points = 1 << 14  # 16384 records per chunk
+
+    def compute_time_bounds() -> tuple[float, float, int]:
+        min_time = math.inf
+        max_time = -math.inf
+        kept_points = 0
+        with raw_path.open("rb") as handle_bounds:
+            handle_bounds.seek(data_offset)
+            leftover_bounds = bytearray()
+            while True:
+                chunk_bytes = handle_bounds.read(chunk_points * record_size)
+                if not chunk_bytes and not leftover_bounds:
+                    break
+                leftover_bounds.extend(chunk_bytes)
+                available_bounds = len(leftover_bounds) // record_size
+                if available_bounds == 0:
+                    continue
+                block_bounds = np.frombuffer(
+                    memoryview(leftover_bounds)[: available_bounds * record_size],
+                    dtype=dtype,
+                    count=available_bounds,
+                )
+                leftover_bounds = bytearray(
+                    leftover_bounds[available_bounds * record_size :]
+                )
+                times_bounds = block_bounds["time"].astype(np.float64, copy=False)
+                if times_bounds.size:
+                    min_time = min(min_time, float(np.min(times_bounds)))
+                    max_time = max(max_time, float(np.max(times_bounds)))
+                    kept_points += int(np.count_nonzero(times_bounds >= 0.0))
+        if not math.isfinite(min_time) or not math.isfinite(max_time):
+            raise RuntimeError(f"Failed to determine time bounds for {raw_path}")
+        return min_time, max_time, kept_points
+
+    min_time, max_time, kept_points = compute_time_bounds()
+    reference_time = 0.0
+
+    target_count = min(kept_points if kept_points else point_count, sample_target)
+    sample_indices = (
+        np.linspace(0, max(kept_points, 1) - 1, num=target_count, dtype=np.int64)
+        if kept_points
+        else np.zeros(0, dtype=np.int64)
+    )
+    sample_pos = 0
+    down_time: list[float] = []
+    down_values: dict[str, list[float]] = {name: [] for name in signal_list}
+
+    chunk_points = 1 << 14  # 16384 records per chunk
+
+    def ensure_bin_range(min_bin: int, max_bin: int) -> None:
+        nonlocal counts, sum_time_rel, sum_irad_sq, sum_signals, bin_offset
+        if counts.size == 0:
+            size = max_bin - min_bin + 1
+            bin_offset = min_bin
+            counts = np.zeros(size, dtype=np.float64)
+            sum_time_rel = np.zeros(size, dtype=np.float64)
+            sum_irad_sq = np.zeros(size, dtype=np.float64)
+            for key in signal_list:
+                sum_signals[key] = np.zeros(size, dtype=np.float64)
+            return
+        if min_bin < bin_offset:
+            prepend = bin_offset - min_bin
+            counts = np.pad(counts, (prepend, 0))
+            sum_time_rel = np.pad(sum_time_rel, (prepend, 0))
+            sum_irad_sq = np.pad(sum_irad_sq, (prepend, 0))
+            for key in signal_list:
+                sum_signals[key] = np.pad(sum_signals[key], (prepend, 0))
+            bin_offset = min_bin
+        if max_bin >= bin_offset + counts.size:
+            append = max_bin - (bin_offset + counts.size - 1)
+            counts = np.pad(counts, (0, append))
+            sum_time_rel = np.pad(sum_time_rel, (0, append))
+            sum_irad_sq = np.pad(sum_irad_sq, (0, append))
+            for key in signal_list:
+                sum_signals[key] = np.pad(sum_signals[key], (0, append))
+
+    total_points = 0
+    total_irad_sq = 0.0
+    total_ignd = 0.0
+    total_delta_v = 0.0
+
+    mins = {name: np.inf for name in signal_list}
+    maxs = {name: -np.inf for name in signal_list}
+
+    first_time: float | None = None
+    last_time: float | None = None
+
+    with raw_path.open("rb") as handle:
+        handle.seek(data_offset)
+        leftover = bytearray()
+        processed_kept = 0
+        while True:
+            chunk = handle.read(chunk_points * record_size)
+            if not chunk and not leftover:
+                break
+            leftover.extend(chunk)
+            available = len(leftover) // record_size
+            if available == 0:
+                continue
+
+            block = np.frombuffer(
+                memoryview(leftover)[: available * record_size],
+                dtype=dtype,
+                count=available,
+            )
+            leftover = bytearray(leftover[available * record_size :])
+
+            times = block["time"].astype(np.float64, copy=False)
+            values = block["values"].astype(np.float64, copy=False)
+            selected = values[:, signal_indices]
+
+            mask = (times >= 0.0) & (times <= max_time + 1e-12)
+            if not np.any(mask):
+                continue
+            times = times[mask]
+            values = values[mask]
+            selected = selected[mask]
+            rel_time = times - reference_time
+
+            bins = np.floor_divide(rel_time, resample_seconds).astype(np.int64)
+            if bins.size == 0:
+                continue
+            min_bin = int(np.floor(np.min(bins)))
+            max_bin = int(np.floor(np.max(bins)))
+            ensure_bin_range(min_bin, max_bin)
+            adjusted_bins = bins - bin_offset
+
+            np.add.at(counts, adjusted_bins, 1)
+            np.add.at(sum_time_rel, adjusted_bins, rel_time)
+
+            for column_idx, name in enumerate(signal_list):
+                column_values = selected[:, column_idx]
+                np.add.at(sum_signals[name], adjusted_bins, column_values)
+                mins[name] = min(mins[name], float(np.min(column_values)))
+                maxs[name] = max(maxs[name], float(np.max(column_values)))
+
+            irad = selected[:, idx_irad]
+            ignd = selected[:, idx_ignd]
+            vnd = selected[:, idx_vnd]
+            vna = selected[:, idx_vna]
+
+            np.add.at(sum_irad_sq, adjusted_bins, irad * irad)
+
+            total_points += irad.size
+            total_irad_sq += float(np.sum(irad * irad))
+            total_ignd += float(np.sum(ignd))
+            total_delta_v += float(np.sum(vnd - vna))
+
+            if target_count:
+                upper = processed_kept + irad.size
+                while sample_pos < target_count and sample_indices[sample_pos] < upper:
+                    local_idx = int(sample_indices[sample_pos] - processed_kept)
+                    down_time.append(float(times[local_idx]))
+                    for column_idx, name in enumerate(signal_list):
+                        down_values[name].append(float(selected[local_idx, column_idx]))
+                    sample_pos += 1
+
+            processed_kept += irad.size
+            if last_time is None:
+                last_time = float(np.max(times))
+            else:
+                last_time = max(last_time, float(np.max(times)))
+            if first_time is None:
+                first_time = float(np.min(times))
+            else:
+                first_time = min(first_time, float(np.min(times)))
+
+        if processed_kept != kept_points:
+            raise RuntimeError(
+                f"RAW length mismatch for {raw_path}: expected {kept_points}, processed {processed_kept}"
+            )
+
+    if counts.size == 0 or np.all(counts == 0):
+        raise RuntimeError(f"No samples aggregated from {raw_path}")
+
+    nonzero_indices = np.nonzero(counts)[0]
+    start_idx = int(nonzero_indices[0])
+    end_idx = int(nonzero_indices[-1]) + 1
+    counts = counts[start_idx:end_idx]
+    sum_time_rel = sum_time_rel[start_idx:end_idx]
+    sum_irad_sq = sum_irad_sq[start_idx:end_idx]
+    for name in signal_list:
+        sum_signals[name] = sum_signals[name][start_idx:end_idx]
+    bin_offset += start_idx
+
+    valid_mask = counts > 0
+    counts_nz = counts[valid_mask]
+    sum_time_rel = sum_time_rel[valid_mask]
+    for name in signal_list:
+        sum_signals[name] = sum_signals[name][valid_mask]
+    sum_irad_sq = sum_irad_sq[valid_mask]
+
+    time_seconds = sum_time_rel / counts_nz
+    time_seconds = time_seconds - time_seconds.min()
+
+    resampled_dict: dict[str, np.ndarray] = {
+        "time_seconds": time_seconds,
+        "V(nd)": sum_signals["V(nd)"] / counts_nz,
+        "V(na)": sum_signals["V(na)"] / counts_nz,
+        "V(t)": sum_signals["V(t)"] / counts_nz,
+        "I(R_rad)": sum_signals["I(R_rad)"] / counts_nz,
+        "I(R_gnd)": sum_signals["I(R_gnd)"] / counts_nz,
+    }
+    resampled_dict["delta_v"] = (
+        resampled_dict["V(nd)"] - resampled_dict["V(na)"]
+    )
+    resampled_dict["power_w"] = (
+        sum_irad_sq / counts_nz * resistance
+    )
+    resampled_dict["power_uW"] = resampled_dict["power_w"] * 1e6
+    resampled_dict["current_mA"] = resampled_dict["I(R_gnd)"] * 1e3
+
+    resampled_df = pd.DataFrame(resampled_dict)
+
+    sample_dict: dict[str, list[float]] = {"time": down_time}
+    for name in signal_list:
+        sample_dict[name] = down_values[name]
+    sample_df = pd.DataFrame(sample_dict).sort_values("time", kind="mergesort").reset_index(drop=True)
+
+    if first_time is None or last_time is None:
+        raise RuntimeError(f"Failed to capture time bounds for {raw_path}")
+
+    if first_time is None or last_time is None:
+        raise RuntimeError(f"Failed to capture time bounds for {raw_path}")
+
+    duration = max_time - min_time
+    if duration <= 0:
+        raise RuntimeError(f"Non-positive simulation duration detected in {raw_path}")
+
+    resampled_peak_power_w = float(np.max(resampled_dict["power_w"]))
+    resampled_peak_current_a = float(np.max(np.abs(resampled_dict["I(R_gnd)"])))
+    resampled_peak_delta_v = float(np.max(np.abs(resampled_dict["delta_v"])))
+
+    summary = {
+        "time_stop_s": float(duration),
+        "time_stop_us": float(duration * 1e6),
+        "point_count": float(point_count),
+        "downsample_stride": float(
+            point_count / target_count if target_count else float("nan")
+        ),
+        "total_points": float(total_points),
+        "total_irad_sq": float(total_irad_sq),
+        "total_current_sum": float(total_ignd),
+        "total_delta_v_sum": float(total_delta_v),
+        "duration_s": float(duration),
+        "peak_power_w": resampled_peak_power_w,
+        "peak_current_a": resampled_peak_current_a,
+        "peak_delta_v": resampled_peak_delta_v,
+    }
+    for name in signal_list:
+        summary[f"{name}_min"] = float(mins[name])
+        summary[f"{name}_max"] = float(maxs[name])
+
+    return sample_df, resampled_df, summary
+
+
 def generate_visualisations(args: argparse.Namespace) -> ProcessedData:
     case = args.case
     case_dir = args.data_root / case
-    csv_path = case_dir / f"JPE_diel_{case}_timeseries.csv"
+    raw_path = _locate_raw_file(case_dir)
 
     resistance, netlist_path = resolve_radiation_resistance(
         case,
@@ -314,26 +669,46 @@ def generate_visualisations(args: argparse.Namespace) -> ProcessedData:
         args.power_resistance,
     )
 
-    raw_df = load_timeseries(csv_path)
-    enriched = enrich_dataframe(raw_df, resistance, args.time_unit)
-    resampled = resample_dataframe(enriched, args.resample)
+    signals = ["V(nd)", "V(na)", "V(t)", "V(nc)", "V(nb)", "I(R_rad)", "I(R_gnd)"]
+    sample_df, resampled, aggregation = aggregate_raw_waveforms(
+        raw_path,
+        resample_rule=args.resample,
+        signals=signals,
+        resistance=resistance,
+    )
 
     output_case_dir = args.output_data / case
-    save_dataframe(enriched.reset_index(drop=True), output_case_dir / "timeseries_enriched.csv")
+    save_dataframe(sample_df, output_case_dir / "timeseries_enriched.csv")
     save_dataframe(resampled, output_case_dir / f"timeseries_resampled_{args.resample}.csv")
 
-    stats = {
+    if resampled.empty:
+        raise RuntimeError(f"Resampled dataframe for case {case} is empty")
+
+    time_span_ms = float(
+        (resampled["time_seconds"].iloc[-1] - resampled["time_seconds"].iloc[0]) * 1e3
+    )
+
+    duration_s = aggregation["duration_s"]
+
+    mean_power_uW = float(resampled["power_uW"].mean())
+    peak_power_uW = float(resampled["power_uW"].max())
+    mean_current_mA = float(resampled["current_mA"].mean())
+    peak_current_mA = float(np.abs(resampled["current_mA"]).max())
+    mean_delta_v = float(resampled["delta_v"].mean())
+    peak_delta_v = float(np.max(np.abs(resampled["delta_v"])))
+
+    summary = {
         "case": case,
         "radiation_resistance_ohm": resistance,
-        "time_span_ms": float((resampled["time_seconds"].max() - resampled["time_seconds"].min()) * 1e3),
-        "mean_power_uW": float(resampled["power_uW"].mean()),
-        "peak_power_uW": float(resampled["power_uW"].max()),
-        "mean_current_mA": float(resampled["current_mA"].mean()),
-        "peak_current_mA": float(resampled["current_mA"].max()),
-        "mean_delta_v": float(resampled["delta_v"].mean()),
-        "peak_delta_v": float(resampled["delta_v"].max()),
+        "time_span_ms": time_span_ms,
+        "mean_power_uW": mean_power_uW,
+        "peak_power_uW": peak_power_uW,
+        "mean_current_mA": mean_current_mA,
+        "peak_current_mA": peak_current_mA,
+        "mean_delta_v": mean_delta_v,
+        "peak_delta_v": peak_delta_v,
     }
-    save_summary(stats, output_case_dir / "summary.json")
+    save_summary(summary, output_case_dir / "summary.json")
 
     figure_case_dir = args.figure_dir
     time_axis_ms = resampled["time_seconds"].to_numpy() * 1e3
@@ -369,14 +744,15 @@ def generate_visualisations(args: argparse.Namespace) -> ProcessedData:
         )
 
     plot_dc_scatter(resampled, figure_case_dir / f"{case}_dc_scatter.png")
+    plot_waveforms(sample_df, figure_case_dir / f"JPE_diel_{case}_waveforms.png", case)
 
     return ProcessedData(
         case=case,
-        raw=enriched.reset_index(drop=True),
+        raw=sample_df.reset_index(drop=True),
         resampled=resampled,
         power_resistance=resistance,
         netlist_path=netlist_path,
-        input_csv=csv_path,
+        raw_path=raw_path,
     )
 
 
