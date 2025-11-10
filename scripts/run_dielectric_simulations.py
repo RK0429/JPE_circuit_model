@@ -590,7 +590,7 @@ def render_plot(df: pd.DataFrame, destination: Path, case: str) -> None:
             continue
         ax_bottom.plot(time_axis[mask], values[mask], label=f"{column} (mA)")
     ax_bottom.set_ylabel("Current [mA]")
-    ax_bottom.set_xlabel("t [μs]")
+    ax_bottom.set_xlabel(r"$t$ [$\mu$s]")
     ax_bottom.set_title("Source branch currents")
     ax_bottom.legend(loc="best")
 

@@ -436,6 +436,14 @@ def parse_args() -> argparse.Namespace:
         choices=list(SIMULATION_CASES.keys()),
         help="Subset of cases to generate (default: all)",
     )
+    parser.add_argument(
+        "--swap-array-resonant",
+        action="store_true",
+        help=(
+            "Swap array-side bulk parameters (R_P, L_P, C_int) with the resonant branch "
+            "(R, L, C) before rendering the decks."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -449,7 +457,7 @@ def main() -> None:
         MesaGeometry("Mesa2", area_um2=24_500.0, thickness_nm=258.0, critical_current_ma=18.0),
         MesaGeometry("Mesa3", area_um2=24_568.0, thickness_nm=954.0, critical_current_ma=18.05),
     ]
-    bulk = BulkParameters(
+    baseline_bulk = BulkParameters(
         r_p_total=1.5190,
         l_p_total=2.6958e-12,
         c_int_total=1.2149e-13,
@@ -458,6 +466,18 @@ def main() -> None:
         c_total=1.0498e-14,
         r_int_total=204.1,
     )
+    if args.swap_array_resonant:
+        bulk = BulkParameters(
+            r_p_total=baseline_bulk.r_total,
+            l_p_total=baseline_bulk.l_total,
+            c_int_total=baseline_bulk.c_total,
+            r_total=baseline_bulk.r_p_total,
+            l_total=baseline_bulk.l_p_total,
+            c_total=baseline_bulk.c_int_total,
+            r_int_total=baseline_bulk.r_int_total,
+        )
+    else:
+        bulk = baseline_bulk
 
     mesas = compute_mesa_parameters(geometries, bulk)
 

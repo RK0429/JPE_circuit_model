@@ -302,7 +302,7 @@ def plot_dc_scatter(df: pd.DataFrame, destination: Path) -> None:
     }
 
     ax_power.scatter(delta_v, power_uw, **scatter_kwargs)
-    ax_power.set_ylabel("Radiated Power [μW]")
+    ax_power.set_ylabel(r"Radiated Power [$\mu$W]")
     ax_power.set_xticklabels([])
 
     ax_joint.scatter(delta_v, current_ma, **scatter_kwargs)
@@ -310,7 +310,7 @@ def plot_dc_scatter(df: pd.DataFrame, destination: Path) -> None:
     ax_joint.set_ylabel("Return Current [mA]")
 
     ax_current.scatter(power_uw, current_ma, **scatter_kwargs)
-    ax_current.set_xlabel("Radiated Power [μW]")
+    ax_current.set_xlabel(r"Radiated Power [$\mu$W]")
     ax_current.set_yticklabels([])
 
     fig.tight_layout()
@@ -348,7 +348,7 @@ def plot_waveforms(sample_df: pd.DataFrame, destination: Path, case: str) -> Non
             continue
         ax_bottom.plot(time_axis[mask], values[mask], label=f"{column} (mA)")
     ax_bottom.set_ylabel("Current [mA]")
-    ax_bottom.set_xlabel("t [μs]")
+    ax_bottom.set_xlabel(r"$t$ [$\mu$s]")
     ax_bottom.set_title("Source branch currents")
     ax_bottom.legend(loc="best")
 
@@ -724,7 +724,7 @@ def generate_visualisations(args: argparse.Namespace) -> ProcessedData:
     plot_time_series(
         time_axis_ms,
         resampled["power_uW"],
-        ylabel="Radiated Power [μW]",
+        ylabel=r"Radiated Power [$\mu$W]",
         title=f"Case {case}: Radiated Power (resampled {args.resample})",
         destination=figure_case_dir / f"{case}_power_time.png",
     )
