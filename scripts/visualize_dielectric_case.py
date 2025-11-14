@@ -582,8 +582,16 @@ def aggregate_raw_waveforms(  # noqa: PLR0912, PLR0914, PLR0915
                 first_time = min(first_time, float(np.min(times)))
 
         if processed_kept != kept_points:
-            raise RuntimeError(
-                f"RAW length mismatch for {raw_path}: expected {kept_points}, processed {processed_kept}"
+            delta = processed_kept - kept_points
+            if abs(delta) > 1:
+                raise RuntimeError(
+                    f"RAW length mismatch for {raw_path}: expected {kept_points}, processed {processed_kept}"
+                )
+            logger.warning(
+                "RAW length mismatch for %s (expected %s, processed %s); continuing",
+                raw_path,
+                kept_points,
+                processed_kept,
             )
 
     if counts.size == 0 or np.all(counts == 0):

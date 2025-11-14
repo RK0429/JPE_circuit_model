@@ -46,6 +46,7 @@ DEFAULT_SAVE_VARS = (
     "V(Nc)",
     "V(Nb)",
     "V(Na)",
+    "V(Ndc)",
     "V(T)",
     "I(R_rad)",
     "I(R_gnd)",
