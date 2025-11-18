@@ -4,9 +4,9 @@
 This helper consumes the down-sampled CSV files produced by
 ``run_dielectric_simulations.py`` and re-creates the figure set used in
 ``DailyNote/20251001/JPE_circuit_analysis.qmd``: time traces for radiated power,
-ground return current, terminal voltage, temperature, and the DC-style scatter
-plot. The script keeps all artefacts under ``Data/`` and ``Images/`` so that the
-workflow remains reproducible inside the repository.
+bias current, terminal voltage, temperature, and the DC-style scatter plot. The
+script keeps all artefacts under ``Data/`` and ``Images/`` so that the workflow
+remains reproducible inside the repository.
 """
 
 from __future__ import annotations
@@ -306,8 +306,8 @@ def plot_dc_scatter(df: pd.DataFrame, destination: Path) -> None:
     ax_power.set_xticklabels([])
 
     ax_joint.scatter(delta_v, current_ma, **scatter_kwargs)
-    ax_joint.set_xlabel("Differential Voltage [V]")
-    ax_joint.set_ylabel("Return Current [mA]")
+    ax_joint.set_xlabel("Voltage [V]")
+    ax_joint.set_ylabel("Current [mA]")
 
     ax_current.scatter(power_uw, current_ma, **scatter_kwargs)
     ax_current.set_xlabel(r"Radiated Power [$\mu$W]")
@@ -739,15 +739,15 @@ def generate_visualisations(args: argparse.Namespace) -> ProcessedData:
     plot_time_series(
         time_axis_ms,
         resampled["current_mA"],
-        ylabel="Return Current [mA]",
-        title=f"Case {case}: Return Current (resampled {args.resample})",
+        ylabel="Bias Current [mA]",
+        title=f"Case {case}: Bias Current (resampled {args.resample})",
         destination=figure_case_dir / f"{case}_current_time.png",
     )
     plot_time_series(
         time_axis_ms,
         resampled["delta_v"],
-        ylabel="Differential Voltage [V]",
-        title=f"Case {case}: Differential Voltage (resampled {args.resample})",
+        ylabel="Voltage [V]",
+        title=f"Case {case}: Voltage (resampled {args.resample})",
         destination=figure_case_dir / f"{case}_voltage_time.png",
     )
     if "V(t)" in resampled.columns:
