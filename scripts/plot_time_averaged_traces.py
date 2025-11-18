@@ -89,7 +89,7 @@ def main() -> None:
             df,
             x="elapsed_ms",
             y="current_mA",
-            ylabel="Ground Return Current [mA]",
+            ylabel="Bias Current [mA]",
             output=out_dir / f"{prefix}_current_time.png",
             color="#d62728",
         )
@@ -98,7 +98,7 @@ def main() -> None:
             df,
             x="elapsed_ms",
             y="delta_v",
-            ylabel="Differential Voltage [V]",
+            ylabel="Voltage [V]",
             output=out_dir / f"{prefix}_voltage_time.png",
             color="#2ca02c",
         )
