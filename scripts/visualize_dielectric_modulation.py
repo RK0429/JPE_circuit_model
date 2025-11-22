@@ -7,11 +7,13 @@ import argparse
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Any, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
+from matplotlib.axes import Axes
 
 try:  # allow standalone execution
     from .visualize_dielectric_case import extract_radiation_resistance
@@ -25,6 +27,29 @@ class ModulationEntry:
     f_phys_hz: float
     f_sim_hz: float
     vmod_peak_v: float
+
+
+FloatArray = npt.NDArray[np.float64]
+MIN_INTERPOLATED_SAMPLES = 2
+
+
+@dataclass
+class DiffMetrics:
+    freq_sim_hz: FloatArray
+    freq_phys_hz: FloatArray
+    amplitudes: FloatArray
+    vpp_target_v: float
+    dt: float
+    time: FloatArray
+    diff_series: FloatArray
+    target_idx: int
+
+
+@dataclass
+class PowerMetrics:
+    mean_w: float
+    peak_w: float
+    amplitudes_w: FloatArray
 
 
 def parse_args() -> argparse.Namespace:
@@ -78,16 +103,16 @@ def load_config(path: Path) -> tuple[str, float, list[ModulationEntry]]:
     return payload["case"], float(payload["v_bias_source_v"]), entries
 
 
-def interpolate_uniform(time: np.ndarray, values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    uniform_time = np.linspace(time[0], time[-1], len(time))
-    uniform_values = np.interp(uniform_time, time, values)
+def interpolate_uniform(time: FloatArray, values: FloatArray) -> tuple[FloatArray, FloatArray]:
+    uniform_time = np.linspace(time[0], time[-1], len(time), dtype=float)
+    uniform_values = np.asarray(np.interp(uniform_time, time, values), dtype=float)
     return uniform_time, uniform_values
 
 
-def compute_fft(values: np.ndarray, dt: float) -> tuple[np.ndarray, np.ndarray]:
-    freq = np.fft.rfftfreq(values.size, d=dt)
+def compute_fft(values: FloatArray, dt: float) -> tuple[FloatArray, FloatArray]:
+    freq = np.asarray(np.fft.rfftfreq(values.size, d=dt), dtype=float)
     spec = np.fft.rfft(values)
-    amp = 2 * np.abs(spec) / values.size
+    amp = np.asarray(2 * np.abs(spec) / values.size, dtype=float)
     if values.size:
         amp[0] = np.abs(spec[0]) / values.size
     return freq, amp
@@ -99,53 +124,65 @@ def select_window(df: pd.DataFrame, window: float) -> pd.DataFrame:
     return df[df["time"] >= start].copy()
 
 
-def analyse_entry(
-    entry: ModulationEntry,
-    case: str,
-    data_root: Path,
-    analysis_root: Path,
-    figure_root: Path,
-    steady_window: float,
-    v_bias: float,
-) -> dict[str, float | str]:
+def _resolve_case_dir(entry: ModulationEntry, case: str, data_root: Path) -> Path:
     candidates = [entry.label, f"f{entry.label}", entry.label.lower(), f"f{entry.label.lower()}"]
     for candidate in candidates:
         potential_dir = data_root / candidate / case
         if potential_dir.exists():
-            case_dir = potential_dir
-            break
-    else:
-        raise FileNotFoundError(f"Unable to locate data for label {entry.label} under {data_root}")
-    label_key = case_dir.parent.name
-    csv_path = case_dir / "JPE_diel_1-4-15_timeseries.csv"
-    netlist_path = case_dir / "JPE_diel_1-4-15.net"
-    df = pd.read_csv(csv_path)
+            return potential_dir
+    msg = f"Unable to locate data for label {entry.label} under {data_root}"
+    raise FileNotFoundError(msg)
 
-    steady_df = select_window(df, steady_window)
-    if steady_df.empty:
-        raise ValueError(f"No samples retained for {entry.label} window={steady_window}")
 
+def _compute_diff_metrics(
+    steady_df: pd.DataFrame, entry: ModulationEntry, steady_window: float
+) -> DiffMetrics:
     diff = steady_df["V(na)"] - steady_df["V(nb)"]
     diff_ac = diff - diff.mean()
-    diff_time = steady_df["time"].to_numpy()
-    u_time, u_diff = interpolate_uniform(diff_time, diff_ac.to_numpy())
+    diff_time = steady_df["time"].to_numpy(dtype=float)
+    u_time, u_diff = interpolate_uniform(diff_time, diff_ac.to_numpy(dtype=float))
+    if u_time.size < MIN_INTERPOLATED_SAMPLES:
+        msg = f"Insufficient samples retained for {entry.label} window={steady_window}"
+        raise ValueError(msg)
+
     dt = float(u_time[1] - u_time[0])
     diff_freq, diff_amp = compute_fft(u_diff, dt)
-    target_idx = int(np.argmin(np.abs(diff_freq - entry.f_sim_hz)))
-    vpp_target = float(2 * diff_amp[target_idx])
+    target_idx = int(np.argmin(np.abs(diff_freq - entry.f_sim_hz))) if diff_amp.size else 0
+    vpp_target = float(2 * diff_amp[target_idx]) if diff_amp.size else 0.0
+    freq_phys = diff_freq * 1e6
 
+    return DiffMetrics(
+        freq_sim_hz=diff_freq,
+        freq_phys_hz=freq_phys,
+        amplitudes=diff_amp,
+        vpp_target_v=vpp_target,
+        dt=dt,
+        time=u_time,
+        diff_series=u_diff,
+        target_idx=target_idx,
+    )
+
+
+def _compute_power_metrics(
+    steady_df: pd.DataFrame, dt: float, netlist_path: Path
+) -> PowerMetrics:
     r_rad = extract_radiation_resistance(netlist_path)
-    irad = steady_df["I(R_rad)"].to_numpy()
+    irad = steady_df["I(R_rad)"].to_numpy(dtype=float)
     power = (irad**2) * r_rad
     power_mean_w = float(power.mean())
     power_peak_w = float(power.max())
     power_ac = power - power.mean()
-    u_time_p, u_power = interpolate_uniform(diff_time, power_ac)
-    _, power_amp = compute_fft(u_power, dt)
+    _, power_amp = compute_fft(power_ac, dt)
+    return PowerMetrics(mean_w=power_mean_w, peak_w=power_peak_w, amplitudes_w=power_amp)
 
-    freq_phys = diff_freq * 1e6
-    sorted_idx = np.argsort(power_amp[1:])[-5:] + 1 if power_amp.size > 1 else np.array([], dtype=int)
-    peaks = [
+
+def _select_power_peaks(
+    diff_freq: FloatArray, power_amp: FloatArray, freq_phys: FloatArray
+) -> list[dict[str, float]]:
+    if power_amp.size <= 1:
+        return []
+    sorted_idx = np.argsort(power_amp[1:])[-5:] + 1
+    return [
         {
             "freq_sim_hz": float(diff_freq[idx]),
             "freq_phys_hz": float(freq_phys[idx]),
@@ -154,19 +191,48 @@ def analyse_entry(
         for idx in sorted_idx[::-1]
     ]
 
+
+def analyse_entry(
+    entry: ModulationEntry,
+    case: str,
+    data_root: Path,
+    analysis_root: Path,
+    figure_root: Path,
+    steady_window: float,
+    v_bias: float,
+) -> dict[str, float | str | list[dict[str, float]]]:
+    case_dir = _resolve_case_dir(entry, case, data_root)
+    label_key = case_dir.parent.name
+    csv_path = case_dir / "JPE_diel_1-4-15_timeseries.csv"
+    netlist_path = case_dir / "JPE_diel_1-4-15.net"
+    df = pd.read_csv(csv_path)
+
+    steady_df = select_window(df, steady_window)
+    if steady_df.empty:
+        msg = f"No samples retained for {entry.label} window={steady_window}"
+        raise ValueError(msg)
+
+    diff_metrics = _compute_diff_metrics(steady_df, entry, steady_window)
+    power_metrics = _compute_power_metrics(steady_df, diff_metrics.dt, netlist_path)
+    peaks = _select_power_peaks(
+        diff_metrics.freq_sim_hz, power_metrics.amplitudes_w, diff_metrics.freq_phys_hz
+    )
+
     summary = {
         "case": case,
         "label": entry.label,
         "f_phys_hz": entry.f_phys_hz,
         "f_sim_hz": entry.f_sim_hz,
         "vmod_peak_v": entry.vmod_peak_v,
-        "vpp_at_target_v": vpp_target,
-        "fft_bin_frequency_hz": float(diff_freq[target_idx]),
-        "fft_bin_frequency_phys_hz": float(freq_phys[target_idx]),
+        "vpp_at_target_v": diff_metrics.vpp_target_v,
+        "fft_bin_frequency_hz": float(diff_metrics.freq_sim_hz[diff_metrics.target_idx]),
+        "fft_bin_frequency_phys_hz": float(
+            diff_metrics.freq_phys_hz[diff_metrics.target_idx]
+        ),
         "time_window_s": steady_window,
         "v_bias_source_v": v_bias,
-        "radiated_power_mean_w": power_mean_w,
-        "radiated_power_peak_w": power_peak_w,
+        "radiated_power_mean_w": power_metrics.mean_w,
+        "radiated_power_peak_w": power_metrics.peak_w,
         "radiation_peaks": peaks,
     }
 
@@ -179,24 +245,30 @@ def analyse_entry(
 
     np.savez(
         analysis_dir / "spectra.npz",
-        freq_sim=diff_freq,
-        freq_phys=freq_phys,
-        diff_amp=diff_amp,
-        power_amp=power_amp,
+        freq_sim=diff_metrics.freq_sim_hz,
+        freq_phys=diff_metrics.freq_phys_hz,
+        diff_amp=diff_metrics.amplitudes,
+        power_amp=power_metrics.amplitudes_w,
     )
 
-    fig, axes = plt.subplots(2, 1, figsize=(7.5, 7.5))
-    axes[0].plot((u_time - u_time[0]) * 1e3, u_diff * 1e3)
-    axes[0].set_title(f"{entry.label}: Delta V time-domain (last {steady_window*1e3:.0f} ms)")
-    axes[0].set_xlabel("Time [ms]")
-    axes[0].set_ylabel("Delta V [mV]")
+    fig, axes_array = plt.subplots(2, 1, figsize=(7.5, 7.5))
+    axes_array = cast(np.ndarray[Any], axes_array)
+    ax_time = cast(Axes, axes_array[0])
+    ax_power = cast(Axes, axes_array[1])
 
-    axes[1].plot(freq_phys * 1e-9, power_amp * 1e6)
-    axes[1].set_title("Radiated Power Spectrum")
-    axes[1].set_xlabel("Frequency [GHz]")
-    axes[1].set_ylabel("Amplitude [µW]")
-    axes[1].set_xlim(0, freq_phys.max() * 1e-9)
-    axes[1].grid(True, which="both", linestyle=":", linewidth=0.5)
+    ax_time.plot((diff_metrics.time - diff_metrics.time[0]) * 1e3, diff_metrics.diff_series * 1e3)
+    ax_time.set_title(
+        f"{entry.label}: Delta V time-domain (last {steady_window * 1e3:.0f} ms)"
+    )
+    ax_time.set_xlabel("Time [ms]")
+    ax_time.set_ylabel("Delta V [mV]")
+
+    ax_power.plot(diff_metrics.freq_phys_hz * 1e-9, power_metrics.amplitudes_w * 1e6)
+    ax_power.set_title("Radiated Power Spectrum")
+    ax_power.set_xlabel("Frequency [GHz]")
+    ax_power.set_ylabel("Amplitude [uW]")
+    ax_power.set_xlim(0, diff_metrics.freq_phys_hz.max() * 1e-9)
+    ax_power.grid(True, which="both", linestyle=":", linewidth=0.5)
 
     fig.tight_layout()
     fig.savefig(figure_dir / "modulation_overview.png", dpi=300)
@@ -211,7 +283,7 @@ def main() -> None:
     args.analysis_root.mkdir(parents=True, exist_ok=True)
     args.figure_root.mkdir(parents=True, exist_ok=True)
 
-    all_summaries: list[dict[str, float | str]] = []
+    all_summaries: list[dict[str, float | str | list[dict[str, float]]]] = []
     for entry in entries:
         summary = analyse_entry(
             entry=entry,
