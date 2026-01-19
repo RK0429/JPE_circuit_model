@@ -13,11 +13,12 @@ from __future__ import annotations
 
 # ruff: noqa: TRY003 - CLI surfaces descriptive error messages for operators.
 import argparse
+import importlib.util
 import json
 import logging
 import math
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -27,10 +28,19 @@ import numpy as np
 import pandas as pd
 from matplotlib.axes import Axes
 
-try:
-    from .run_dielectric_simulations import read_raw_header
-except ImportError:  # pragma: no cover - allow direct execution
-    from run_dielectric_simulations import read_raw_header
+SCRIPT_ROOT = Path(__file__).resolve().parent
+_RUNNER_SPEC = importlib.util.spec_from_file_location(
+    "_dielectric_runner", SCRIPT_ROOT / "run_dielectric_simulations.py"
+)
+if _RUNNER_SPEC is None or _RUNNER_SPEC.loader is None:
+    raise RuntimeError("Failed to load run_dielectric_simulations module")
+
+_dielectric = importlib.util.module_from_spec(_RUNNER_SPEC)
+_RUNNER_SPEC.loader.exec_module(_dielectric)
+read_raw_header = cast(
+    Callable[[Path], tuple[int, list[str], int]],
+    _dielectric.read_raw_header,
+)
 
 
 def read_netlist_with_fallback(path: Path) -> str:

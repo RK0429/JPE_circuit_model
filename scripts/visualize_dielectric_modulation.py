@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -15,10 +17,19 @@ import numpy.typing as npt
 import pandas as pd
 from matplotlib.axes import Axes
 
-try:  # allow standalone execution
-    from .visualize_dielectric_case import extract_radiation_resistance
-except ImportError:  # pragma: no cover - fallback for script mode
-    from visualize_dielectric_case import extract_radiation_resistance
+SCRIPT_ROOT = Path(__file__).resolve().parent
+_CASE_SPEC = importlib.util.spec_from_file_location(
+    "_dielectric_case", SCRIPT_ROOT / "visualize_dielectric_case.py"
+)
+if _CASE_SPEC is None or _CASE_SPEC.loader is None:
+    raise RuntimeError("Failed to load visualize_dielectric_case module")  # noqa: TRY003
+
+_case_module = importlib.util.module_from_spec(_CASE_SPEC)
+_CASE_SPEC.loader.exec_module(_case_module)
+extract_radiation_resistance = cast(
+    Callable[[Path], float],
+    _case_module.extract_radiation_resistance,
+)
 
 
 @dataclass
